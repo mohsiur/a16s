@@ -100,6 +100,10 @@ func (v *view) handleTableEvents() {
 // Handle selected event for table when press up and down
 // Detail page will switch
 func (v *view) handleSelectionChanged(row, column int) {
+	if v.app.activeKind != nil {
+		v.app.activeKind.SetSelection(v.tableSelectionForActiveKind(row))
+		return
+	}
 	v.changeSelectedValues()
 	selected, err := v.getCurrentSelection()
 	if err != nil {
@@ -108,6 +112,17 @@ func (v *view) handleSelectionChanged(row, column int) {
 	}
 	v.app.rowIndex = row
 	v.headerPages.SwitchToPage(selected.entityName)
+}
+
+// tableSelectionForActiveKind extracts whatever the active flat kind needs
+// from the current table row. Each kind's Build() stashes the per-row data on
+// the table cell's Reference; here we just retrieve it.
+func (v *view) tableSelectionForActiveKind(row int) any {
+	cell := v.table.GetCell(row, 0)
+	if cell == nil {
+		return nil
+	}
+	return cell.GetReference()
 }
 
 func (v *view) revertProfileOrRegion(to string, prev string) {
