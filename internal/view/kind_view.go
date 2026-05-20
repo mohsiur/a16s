@@ -6,6 +6,31 @@ import (
 	"github.com/rivo/tview"
 )
 
+// pseudoKind is a transient, non-registered kind used as the "host" of an
+// auxiliary screen launched by an action (log tail, invoke result, config
+// dump, etc). It implements kind.Kind with no-op behaviour so the page can
+// be tracked under a unique pseudo-name without polluting the registry.
+type pseudoKind struct{ name string }
+
+func (p *pseudoKind) Name() string                            { return p.name }
+func (p *pseudoKind) Build(kindpkg.App) (kindpkg.View, error) { return nil, nil }
+func (p *pseudoKind) Reset()                                  {}
+func (p *pseudoKind) Selection() any                          { return nil }
+func (p *pseudoKind) SetSelection(any)                        {}
+func (p *pseudoKind) Breadcrumb() string                      { return p.name }
+func (p *pseudoKind) PrimaryAction() kindpkg.Action           { return nil }
+func (p *pseudoKind) SecondaryActions() []kindpkg.Binding     { return nil }
+
+// joinLines concatenates a slice of strings into one, appending a newline
+// after each entry. Used by log-tail action helpers.
+func joinLines(in []string) string {
+	out := ""
+	for _, s := range in {
+		out += s + "\n"
+	}
+	return out
+}
+
 // simpleKindView is the default kind.View for table-based flat kinds.
 type simpleKindView struct {
 	flex   *tview.Flex
