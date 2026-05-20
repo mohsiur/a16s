@@ -29,6 +29,11 @@ type App interface {
 	// a loading placeholder immediately, then swap in real content once the
 	// background fetch resolves).
 	QueueUpdateDraw(f func()) *tview.Application
+	// SetFocus moves keyboard focus to p. Required when an async Build
+	// swaps the loading placeholder for the real table — without an
+	// explicit refocus, the Application stays focused on the (now-removed)
+	// placeholder and arrow keys never reach the table.
+	SetFocus(p tview.Primitive) *tview.Application
 }
 
 // View is what a Kind's Build returns. Intentionally minimal so flat kinds

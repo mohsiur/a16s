@@ -40,7 +40,11 @@ func newLoadingTableKindView(app kindpkg.App, source kindpkg.Kind, load func() e
 				root.AddItem(errView, 0, 1, true)
 				return
 			}
-			populateTableKindView(root, app, source, buildTable())
+			table := buildTable()
+			populateTableKindView(root, app, source, table)
+			// The loading placeholder held focus; after the swap, hand focus
+			// to the table so arrow keys move the row cursor immediately.
+			app.SetFocus(table)
 		})
 	}()
 
