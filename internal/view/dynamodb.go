@@ -4,22 +4,42 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/gdamore/tcell/v2"
 	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
 	"github.com/rivo/tview"
+	"golang.org/x/sync/errgroup"
 )
 
 func init() { kindpkg.Register(&ddbKind{}) }
 
 type ddbKind struct {
 	selected *ddbTypes.TableDescription
+	// inventory captured during Build / Preload so Informer methods can
+	// compute aggregate + per-row detail without re-querying DynamoDB.
+	// `descs` and `descErrs` are parallel to `names` — a nil desc with a
+	// non-nil err means the DescribeTable for that name failed.
+	mu       sync.RWMutex
+	names    []string
+	descs    []*ddbTypes.TableDescription
+	descErrs []error
+	loaded   bool
 }
 
 func (k *ddbKind) Name() string { return "ddb" }
-func (k *ddbKind) Reset()       { k.selected = nil }
+func (k *ddbKind) Reset() {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.selected = nil
+	k.names = nil
+	k.descs = nil
+	k.descErrs = nil
+	k.loaded = false
+}
 
 func (k *ddbKind) Selection() any {
 	if k.selected == nil {
@@ -47,20 +67,94 @@ func (k *ddbKind) PrimaryAction() kindpkg.Action {
 			app.FlashError("no table selected")
 			return nil
 		}
-		items, err := app.APIStore().ScanFirstPage(context.Background(), aws.ToString(k.selected.TableName), 25)
+		tableName := aws.ToString(k.selected.TableName)
+		items, err := app.APIStore().ScanFirstPage(context.Background(), tableName, 25)
 		if err != nil {
 			app.FlashError(err.Error())
 			return err
 		}
-		body, _ := json.MarshalIndent(items, "", "  ")
-		tv := tview.NewTextView().SetText(string(body))
-		tv.SetBorder(true).SetTitle(" scan " + aws.ToString(k.selected.TableName) + " (first 25) ")
-		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
+		flex := renderScanResults(tableName, items)
 		return app.SwitchView(
-			&pseudoKind{name: "scan:" + aws.ToString(k.selected.TableName)},
-			&simpleKindView{flex: flex, app: app, source: k},
+			&pseudoKind{name: "scan:" + tableName},
+			newTextSubView(app, flex),
 		)
 	}
+}
+
+// renderScanResults turns a slice of DynamoDB items into a tview Flex. Items
+// have a different attribute set in general; we union all attribute names
+// across items, prefer key attributes (selected.KeySchema) as the leftmost
+// columns, then alphabetical for the rest. Cells render the underlying
+// AttributeValue as a short string. Long values are truncated with "…".
+func renderScanResults(tableName string, items []map[string]ddbTypes.AttributeValue) *tview.Flex {
+	if len(items) == 0 {
+		tv := tview.NewTextView().SetText("(no items)")
+		tv.SetBorder(true).SetTitle(" scan " + tableName + " (first 25) ")
+		return tview.NewFlex().AddItem(tv, 0, 1, true)
+	}
+
+	attrSet := map[string]struct{}{}
+	for _, it := range items {
+		for k := range it {
+			attrSet[k] = struct{}{}
+		}
+	}
+	attrs := make([]string, 0, len(attrSet))
+	for a := range attrSet {
+		attrs = append(attrs, a)
+	}
+	sort.Strings(attrs)
+
+	scanTable := tview.NewTable().SetBorders(false)
+	scanTable.SetSelectable(true, false)
+	scanTable.SetFixed(1, 0)
+	for col, h := range attrs {
+		scanTable.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false).SetTextColor(tcell.ColorYellow))
+	}
+	for r, it := range items {
+		for col, attr := range attrs {
+			val := ""
+			if av, ok := it[attr]; ok {
+				val = ddbAttrToString(av)
+			}
+			scanTable.SetCell(r+1, col, tview.NewTableCell(val).SetMaxWidth(40))
+		}
+	}
+	scanTable.SetTitle(" scan " + tableName + " (" + fmt.Sprintf("%d", len(items)) + " items, first 25) ")
+	scanTable.SetBorder(true)
+	return tview.NewFlex().AddItem(scanTable, 0, 1, true)
+}
+
+// ddbAttrToString renders a DynamoDB AttributeValue as a short string
+// suitable for a table cell. Maps and lists are summarised by their length —
+// drilling in is a follow-up.
+func ddbAttrToString(av ddbTypes.AttributeValue) string {
+	switch v := av.(type) {
+	case *ddbTypes.AttributeValueMemberS:
+		return v.Value
+	case *ddbTypes.AttributeValueMemberN:
+		return v.Value
+	case *ddbTypes.AttributeValueMemberBOOL:
+		if v.Value {
+			return "true"
+		}
+		return "false"
+	case *ddbTypes.AttributeValueMemberNULL:
+		return "null"
+	case *ddbTypes.AttributeValueMemberSS:
+		return "[" + fmt.Sprintf("%d strs", len(v.Value)) + "]"
+	case *ddbTypes.AttributeValueMemberNS:
+		return "[" + fmt.Sprintf("%d nums", len(v.Value)) + "]"
+	case *ddbTypes.AttributeValueMemberBS:
+		return "[" + fmt.Sprintf("%d bins", len(v.Value)) + "]"
+	case *ddbTypes.AttributeValueMemberL:
+		return fmt.Sprintf("list(%d)", len(v.Value))
+	case *ddbTypes.AttributeValueMemberM:
+		return fmt.Sprintf("map(%d)", len(v.Value))
+	case *ddbTypes.AttributeValueMemberB:
+		return fmt.Sprintf("bin(%d B)", len(v.Value))
+	}
+	return ""
 }
 
 func (k *ddbKind) SecondaryActions() []kindpkg.Binding {
@@ -81,28 +175,85 @@ func (k *ddbKind) describeAction() kindpkg.Action {
 		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
 		return app.SwitchView(
 			&pseudoKind{name: "describe:" + aws.ToString(k.selected.TableName)},
-			&simpleKindView{flex: flex, app: app, source: k},
+			newTextSubView(app, flex),
 		)
 	}
 }
 
-func (k *ddbKind) Build(app kindpkg.App) (kindpkg.View, error) {
+// Preload satisfies kindpkg.Preloader. Fired in a goroutine on app start so
+// the first `:ddb` is instant. Safe to call concurrently with Build —
+// loadInventory uses RWMutex.
+func (k *ddbKind) Preload(app kindpkg.App) {
+	_ = k.loadInventory(app)
+}
+
+// loadInventory fetches the table list + descriptions once and caches the
+// result. Subsequent calls are no-ops until Reset() is called (e.g. on
+// profile switch).
+func (k *ddbKind) loadInventory(app kindpkg.App) error {
+	k.mu.RLock()
+	if k.loaded {
+		k.mu.RUnlock()
+		return nil
+	}
+	k.mu.RUnlock()
+
 	names, err := app.APIStore().ListTables(context.Background())
 	if err != nil {
+		return err
+	}
+
+	// Fan out DescribeTable. Sequential is unusable on accounts with >50
+	// tables. Per-row errors are kept parallel to names so Build can flash a
+	// last-error notice; cache stores both descs + errs.
+	descs := make([]*ddbTypes.TableDescription, len(names))
+	errs := make([]error, len(names))
+	g, ctx := errgroup.WithContext(context.Background())
+	g.SetLimit(10)
+	for i, name := range names {
+		i, name := i, name
+		g.Go(func() error {
+			td, derr := app.APIStore().DescribeTable(ctx, name)
+			descs[i] = td
+			errs[i] = derr
+			return nil
+		})
+	}
+	_ = g.Wait()
+
+	k.mu.Lock()
+	k.names = names
+	k.descs = descs
+	k.descErrs = errs
+	k.loaded = true
+	k.mu.Unlock()
+	return nil
+}
+
+func (k *ddbKind) Build(app kindpkg.App) (kindpkg.View, error) {
+	if err := k.loadInventory(app); err != nil {
 		return nil, err
 	}
+	k.mu.RLock()
+	names := k.names
+	descs := k.descs
+	errs := k.descErrs
+	k.mu.RUnlock()
 
 	table := tview.NewTable().SetBorders(false)
 	headers := []string{"TableName", "Status", "ItemCount", "SizeBytes", "BillingMode", "Streams"}
 	for col, h := range headers {
 		table.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false).SetTextColor(tcell.ColorYellow))
 	}
-	for row, name := range names {
-		td, derr := app.APIStore().DescribeTable(context.Background(), name)
-		if derr != nil {
-			// Skip rows we can't describe — log via flash and continue. Other
-			// rows are still useful.
-			app.FlashError("describe " + name + ": " + derr.Error())
+
+	rowOut := 0
+	var lastErr error
+	var lastErrName string
+	for i, name := range names {
+		td := descs[i]
+		if errs[i] != nil || td == nil {
+			lastErr = errs[i]
+			lastErrName = name
 			continue
 		}
 		billing := ""
@@ -127,9 +278,77 @@ func (k *ddbKind) Build(app kindpkg.App) (kindpkg.View, error) {
 			if col == 0 {
 				cell.SetReference(copyTD)
 			}
-			table.SetCell(row+1, col, cell)
+			table.SetCell(rowOut+1, col, cell)
 		}
+		rowOut++
+	}
+	if lastErr != nil {
+		app.FlashError("describe " + lastErrName + ": " + lastErr.Error())
 	}
 
 	return newTableKindView(app, k, table), nil
+}
+
+// AggregateInfo / SelectionDetail satisfy kindpkg.Informer.
+func (k *ddbKind) AggregateInfo() string {
+	k.mu.RLock()
+	defer k.mu.RUnlock()
+	successful := 0
+	var totalItems, totalBytes int64
+	streamed := 0
+	for _, td := range k.descs {
+		if td == nil {
+			continue
+		}
+		successful++
+		totalItems += aws.ToInt64(td.ItemCount)
+		totalBytes += aws.ToInt64(td.TableSizeBytes)
+		if td.StreamSpecification != nil && aws.ToBool(td.StreamSpecification.StreamEnabled) {
+			streamed++
+		}
+	}
+	if successful == 0 {
+		return "No tables"
+	}
+	return fmt.Sprintf(
+		"Tables: %d\nTotal items: %d\nTotal size: %s\nWith streams: %d",
+		successful, totalItems, humanBytes(totalBytes), streamed,
+	)
+}
+
+func (k *ddbKind) SelectionDetail() string {
+	if k.selected == nil {
+		return ""
+	}
+	td := k.selected
+	billing := ""
+	if td.BillingModeSummary != nil {
+		billing = string(td.BillingModeSummary.BillingMode)
+	}
+	streams := "no"
+	if td.StreamSpecification != nil && aws.ToBool(td.StreamSpecification.StreamEnabled) {
+		streams = "yes"
+	}
+	return fmt.Sprintf(
+		"Name: %s\nStatus: %s\nItems: %d\nSize: %s\nBilling: %s\nStreams: %s",
+		aws.ToString(td.TableName),
+		td.TableStatus,
+		aws.ToInt64(td.ItemCount),
+		humanBytes(aws.ToInt64(td.TableSizeBytes)),
+		billing,
+		streams,
+	)
+}
+
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }

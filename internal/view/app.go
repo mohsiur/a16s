@@ -197,6 +197,9 @@ func Start(option Option) error {
 			return app.splashStartupErr
 		}
 	} else {
+		// Fire background inventory loads for opt-in flat kinds (Lambda, SQS,
+		// DDB). Each Preload runs in its own goroutine.
+		kindpkg.PreloadAll(app)
 		if err := app.start(); err != nil {
 			return err
 		}

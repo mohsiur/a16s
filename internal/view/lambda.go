@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
@@ -17,11 +19,22 @@ func init() { kindpkg.Register(&lambdaKind{}) }
 
 type lambdaKind struct {
 	selected *lambdaTypes.FunctionConfiguration
+	// inventory captured during Build / Preload so Informer methods can
+	// compute aggregate + per-row detail without re-listing functions.
+	mu     sync.RWMutex
+	fns    []lambdaTypes.FunctionConfiguration
+	loaded bool
 }
 
 func (k *lambdaKind) Name() string { return "lambda" }
 
-func (k *lambdaKind) Reset() { k.selected = nil }
+func (k *lambdaKind) Reset() {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.selected = nil
+	k.fns = nil
+	k.loaded = false
+}
 
 func (k *lambdaKind) Selection() any {
 	if k.selected == nil {
@@ -83,7 +96,7 @@ func (k *lambdaKind) invokeAction() kindpkg.Action {
 		tv := tview.NewTextView().SetText(body)
 		tv.SetBorder(true).SetTitle(title)
 		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-		return app.SwitchView(&pseudoKind{name: "invoke:" + aws.ToString(k.selected.FunctionName)}, &simpleKindView{flex: flex, app: app})
+		return app.SwitchView(&pseudoKind{name: "invoke:" + aws.ToString(k.selected.FunctionName)}, newTextSubView(app, flex))
 	}
 }
 
@@ -154,15 +167,47 @@ func (k *lambdaKind) configAction() kindpkg.Action {
 		tv := tview.NewTextView().SetText(body)
 		tv.SetBorder(true).SetTitle(" " + aws.ToString(k.selected.FunctionName) + " config ")
 		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-		return app.SwitchView(&pseudoKind{name: "config:" + aws.ToString(k.selected.FunctionName)}, &simpleKindView{flex: flex, app: app})
+		return app.SwitchView(&pseudoKind{name: "config:" + aws.ToString(k.selected.FunctionName)}, newTextSubView(app, flex))
 	}
 }
 
-func (k *lambdaKind) Build(app kindpkg.App) (kindpkg.View, error) {
+// Preload satisfies kindpkg.Preloader. Fired in a goroutine on app start so
+// the first `:lambda` is instant. Safe to call concurrently with Build —
+// loadInventory uses RWMutex.
+func (k *lambdaKind) Preload(app kindpkg.App) {
+	_ = k.loadInventory(app)
+}
+
+// loadInventory fetches the function list once and caches the result.
+// Subsequent calls are no-ops until Reset() is called (e.g. on profile
+// switch).
+func (k *lambdaKind) loadInventory(app kindpkg.App) error {
+	k.mu.RLock()
+	if k.loaded {
+		k.mu.RUnlock()
+		return nil
+	}
+	k.mu.RUnlock()
+
 	fns, err := app.APIStore().ListFunctions(context.Background())
 	if err != nil {
+		return err
+	}
+
+	k.mu.Lock()
+	k.fns = fns
+	k.loaded = true
+	k.mu.Unlock()
+	return nil
+}
+
+func (k *lambdaKind) Build(app kindpkg.App) (kindpkg.View, error) {
+	if err := k.loadInventory(app); err != nil {
 		return nil, err
 	}
+	k.mu.RLock()
+	fns := k.fns
+	k.mu.RUnlock()
 
 	table := tview.NewTable().SetBorders(false)
 	headers := []string{"Name", "Runtime", "Memory", "Timeout", "LastModified", "State"}
@@ -206,5 +251,75 @@ func openLogGroupTail(app kindpkg.App, logGroup string) error {
 	tv := tview.NewTextView().SetDynamicColors(true).SetText(strings.Join(logs, ""))
 	tv.SetBorder(true).SetTitle(" " + logGroup + " ")
 	flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-	return app.SwitchView(&pseudoKind{name: "logs:" + logGroup}, &simpleKindView{flex: flex, app: app})
+	return app.SwitchView(&pseudoKind{name: "logs:" + logGroup}, newTextSubView(app, flex))
+}
+
+// AggregateInfo / SelectionDetail satisfy kindpkg.Informer.
+func (k *lambdaKind) AggregateInfo() string {
+	k.mu.RLock()
+	defer k.mu.RUnlock()
+	if len(k.fns) == 0 {
+		return "No functions"
+	}
+	runtimes := map[string]int{}
+	withDLQ := 0
+	for _, fn := range k.fns {
+		runtimes[string(fn.Runtime)]++
+		if fn.DeadLetterConfig != nil && fn.DeadLetterConfig.TargetArn != nil {
+			withDLQ++
+		}
+	}
+	// Top 3 runtimes by count, alphabetised within ties for determinism.
+	type rc struct {
+		name  string
+		count int
+	}
+	rcs := make([]rc, 0, len(runtimes))
+	for r, c := range runtimes {
+		rcs = append(rcs, rc{r, c})
+	}
+	sort.Slice(rcs, func(i, j int) bool {
+		if rcs[i].count != rcs[j].count {
+			return rcs[i].count > rcs[j].count
+		}
+		return rcs[i].name < rcs[j].name
+	})
+	limit := len(rcs)
+	if limit > 3 {
+		limit = 3
+	}
+	var rtSummary strings.Builder
+	for i := 0; i < limit; i++ {
+		if i > 0 {
+			rtSummary.WriteString(", ")
+		}
+		rtSummary.WriteString(fmt.Sprintf("%s (%d)", rcs[i].name, rcs[i].count))
+	}
+	return fmt.Sprintf(
+		"Functions: %d\nRuntimes: %s\nWith DLQ: %d",
+		len(k.fns), rtSummary.String(), withDLQ,
+	)
+}
+
+func (k *lambdaKind) SelectionDetail() string {
+	if k.selected == nil {
+		return ""
+	}
+	fn := k.selected
+	dlq := "none"
+	if fn.DeadLetterConfig != nil && fn.DeadLetterConfig.TargetArn != nil {
+		dlq = parseQueueNameFromArn(aws.ToString(fn.DeadLetterConfig.TargetArn))
+		if dlq == "" {
+			dlq = aws.ToString(fn.DeadLetterConfig.TargetArn)
+		}
+	}
+	return fmt.Sprintf(
+		"Name: %s\nRuntime: %s\nMemory: %d MB\nTimeout: %ds\nState: %s\nDLQ: %s",
+		aws.ToString(fn.FunctionName),
+		fn.Runtime,
+		aws.ToInt32(fn.MemorySize),
+		aws.ToInt32(fn.Timeout),
+		fn.State,
+		dlq,
+	)
 }

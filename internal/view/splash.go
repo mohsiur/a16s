@@ -9,6 +9,7 @@ import (
 	"github.com/keidarcy/e1s/internal/api"
 	"github.com/keidarcy/e1s/internal/color"
 	"github.com/keidarcy/e1s/internal/utils"
+	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
 	"github.com/rivo/tview"
 )
 
@@ -88,6 +89,10 @@ func (app *App) runSplashBootstrap() {
 		} else {
 			app.bootstrapServices = services
 		}
+		// Fire background inventory loads for opt-in flat kinds (Lambda, SQS,
+		// DDB). Each Preload runs in its own goroutine; safe to call before
+		// the main UI is mounted because Kinds own their own caches.
+		kindpkg.PreloadAll(app)
 		app.SetRoot(app.mainScreen, true)
 		if err := app.start(); err != nil {
 			app.Notice.Error(err.Error())

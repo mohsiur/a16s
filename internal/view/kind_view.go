@@ -6,6 +6,26 @@ import (
 	"github.com/rivo/tview"
 )
 
+// newTextSubView wraps a tview.Primitive (typically a TextView, optionally
+// inside its own Flex) into a simpleKindView whose Esc handler calls
+// app.Back(). Sub-views (logs, peek, scan, config, invoke result) need this
+// because the inner TextView's default input capture would otherwise swallow
+// Esc before simpleKindView's OnKey ever sees it.
+func newTextSubView(app kindpkg.App, body tview.Primitive) *simpleKindView {
+	flex, isFlex := body.(*tview.Flex)
+	if !isFlex {
+		flex = tview.NewFlex().AddItem(body, 0, 1, true)
+	}
+	view := &simpleKindView{flex: flex, app: app}
+	flex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if view.OnKey(event) {
+			return nil
+		}
+		return event
+	})
+	return view
+}
+
 // pseudoKind is a transient, non-registered kind used as the "host" of an
 // auxiliary screen launched by an action (log tail, invoke result, config
 // dump, etc). It implements kind.Kind with no-op behaviour so the page can
