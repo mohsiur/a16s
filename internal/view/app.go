@@ -16,6 +16,7 @@ import (
 	"github.com/keidarcy/e1s/internal/color"
 	"github.com/keidarcy/e1s/internal/ui"
 	"github.com/keidarcy/e1s/internal/utils"
+	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
 	"github.com/rivo/tview"
 )
 
@@ -104,6 +105,11 @@ type App struct {
 	bootstrapServices []types.Service
 	// Set when splash bootstrap fails before Run() returns; read after Run().
 	splashStartupErr error
+	// activeKind is non-nil when the user is browsing a flat kind via the `:`
+	// palette. ECS legacy drill-down code paths ignore it.
+	activeKind kindpkg.Kind
+	// palette is the `:` command-mode dispatcher; lazily initialised by showPalette.
+	palette *kindpkg.Palette
 }
 
 func newApp(option Option) (*App, error) {
@@ -430,4 +436,29 @@ func (app *App) copyToClipboard(item string, content string) {
 	}
 
 	app.Notice.Info(fmt.Sprintf("Copied %s to clipboard", item))
+}
+
+// APIStore returns the embedded api.Store. Satisfies kind.App. Named APIStore
+// (not Store) because the *App struct already embeds *api.Store, whose name
+// is promoted as Store — defining a Store() method would collide.
+func (app *App) APIStore() *api.Store { return app.Store }
+
+// FlashError surfaces an error message in the footer notice. Satisfies kind.App.
+func (app *App) FlashError(msg string) {
+	app.Notice.Warn(msg)
+}
+
+// SwitchView swaps the main pane to a kind's view and updates active-kind
+// state. Satisfies kind.App.
+//
+// ECS adapter kinds (Phase 5) return a *noopView and navigate via the existing
+// pages stack themselves; in that case we only record the active kind.
+func (app *App) SwitchView(k kindpkg.Kind, v kindpkg.View) error {
+	app.activeKind = k
+	if _, isNoop := v.(*noopView); isNoop {
+		return nil
+	}
+	pageName := "kind." + k.Name()
+	app.Pages.AddAndSwitchToPage(pageName, v.Render(), true)
+	return nil
 }
