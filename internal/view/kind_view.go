@@ -1,6 +1,8 @@
 package view
 
 import (
+	"strings"
+
 	"github.com/gdamore/tcell/v2"
 	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
 	"github.com/rivo/tview"
@@ -87,10 +89,21 @@ func (p *pseudoKind) PrimaryAction() kindpkg.Action           { return nil }
 func (p *pseudoKind) SecondaryActions() []kindpkg.Binding     { return nil }
 
 // simpleKindView is the default kind.View for table-based flat kinds.
+//
+// Filter state: when the user presses `/`, showFilter mounts a one-line
+// InputField above the table. originalCells captures the unfiltered table
+// cells once at filter-show time (rebuilds on every populateTableKindView)
+// so backspace can restore rows. Enter dismisses the input but keeps the
+// filter applied; Esc clears + dismisses.
 type simpleKindView struct {
 	flex   *tview.Flex
 	app    kindpkg.App
 	source kindpkg.Kind
+
+	table         *tview.Table
+	filterInput   *tview.InputField
+	filterActive  bool
+	originalCells [][]*tview.TableCell
 }
 
 func (s *simpleKindView) Render() *tview.Flex { return s.flex }
@@ -105,6 +118,10 @@ func (s *simpleKindView) OnKey(event *tcell.EventKey) (handled bool) {
 	if s.source == nil {
 		return false
 	}
+	if event.Rune() == '/' && s.table != nil {
+		s.showFilter()
+		return true
+	}
 	if event.Key() == tcell.KeyEnter {
 		if act := s.source.PrimaryAction(); act != nil {
 			act(s.app)
@@ -118,6 +135,147 @@ func (s *simpleKindView) OnKey(event *tcell.EventKey) (handled bool) {
 		}
 	}
 	return false
+}
+
+// showFilter mounts a one-line InputField at the top of the view and
+// applies a column-0 substring match on every keystroke. Enter keeps the
+// filter applied and returns focus to the table; Esc clears it.
+func (s *simpleKindView) showFilter() {
+	if s.filterActive || s.table == nil {
+		return
+	}
+	s.snapshotCells()
+	s.filterActive = true
+	s.filterInput = tview.NewInputField().SetLabel("/").SetFieldWidth(0)
+	s.filterInput.SetChangedFunc(func(text string) {
+		s.applyFilter(text)
+	})
+	s.filterInput.SetDoneFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyEnter:
+			s.dismissFilter(false)
+		case tcell.KeyEsc:
+			s.dismissFilter(true)
+		}
+	})
+	// Mount the input as a 1-row item at the top of the view's flex root.
+	// AddItem appends, so we have to rebuild the children list — easier to
+	// just stash the existing children and re-add them after the input.
+	children := s.collectChildren()
+	s.flex.Clear()
+	s.flex.AddItem(s.filterInput, 1, 0, true)
+	for _, c := range children {
+		s.flex.AddItem(c.item, c.fixed, c.proportion, c.focus)
+	}
+	if s.app != nil {
+		s.app.SetFocus(s.filterInput)
+	}
+}
+
+// snapshotCells walks the current table and stores a row-major snapshot of
+// every TableCell pointer. We re-attach these pointers (not copies) when
+// rebuilding the table, so cell references — which the row-change handler
+// uses to push selection back to the source Kind — survive the filter.
+func (s *simpleKindView) snapshotCells() {
+	rows := s.table.GetRowCount()
+	cols := s.table.GetColumnCount()
+	cells := make([][]*tview.TableCell, rows)
+	for r := 0; r < rows; r++ {
+		row := make([]*tview.TableCell, cols)
+		for c := 0; c < cols; c++ {
+			row[c] = s.table.GetCell(r, c)
+		}
+		cells[r] = row
+	}
+	s.originalCells = cells
+}
+
+// applyFilter rebuilds the visible table by skipping rows whose first-column
+// text doesn't contain `text` (case-insensitive). The header row (row 0) is
+// always preserved.
+func (s *simpleKindView) applyFilter(text string) {
+	if s.originalCells == nil {
+		return
+	}
+	needle := strings.ToLower(strings.TrimSpace(text))
+	s.table.Clear()
+	if len(s.originalCells) == 0 {
+		return
+	}
+	header := s.originalCells[0]
+	for c, cell := range header {
+		if cell != nil {
+			s.table.SetCell(0, c, cell)
+		}
+	}
+	out := 1
+	for r := 1; r < len(s.originalCells); r++ {
+		row := s.originalCells[r]
+		if len(row) == 0 {
+			continue
+		}
+		first := ""
+		if row[0] != nil {
+			first = strings.ToLower(row[0].Text)
+		}
+		if needle != "" && !strings.Contains(first, needle) {
+			continue
+		}
+		for c, cell := range row {
+			if cell != nil {
+				s.table.SetCell(out, c, cell)
+			}
+		}
+		out++
+	}
+	if out > 1 {
+		s.table.Select(1, 0)
+	}
+}
+
+// dismissFilter removes the input row and restores focus to the table. If
+// reset is true, the filter is cleared first so the user sees all rows.
+func (s *simpleKindView) dismissFilter(reset bool) {
+	if !s.filterActive {
+		return
+	}
+	if reset {
+		s.applyFilter("")
+	}
+	s.flex.RemoveItem(s.filterInput)
+	s.filterActive = false
+	s.filterInput = nil
+	if s.app != nil && s.table != nil {
+		s.app.SetFocus(s.table)
+	}
+}
+
+// flexChild captures one tview.Flex child slot so showFilter can re-add
+// children in order when prepending the filter input. tview doesn't expose
+// the existing AddItem args, so we recreate them from the layout we know
+// populateTableKindView built (header 8 fixed + table flex 1).
+type flexChild struct {
+	item       tview.Primitive
+	fixed      int
+	proportion int
+	focus      bool
+}
+
+func (s *simpleKindView) collectChildren() []flexChild {
+	count := s.flex.GetItemCount()
+	out := make([]flexChild, 0, count)
+	for i := 0; i < count; i++ {
+		item := s.flex.GetItem(i)
+		// Mirror the layout populateTableKindView produces: optional 8-row
+		// header, then a flex-1 table. If the source had no informer the
+		// loop just yields the table.
+		if item == s.table {
+			out = append(out, flexChild{item: item, fixed: 0, proportion: 1, focus: true})
+		} else {
+			out = append(out, flexChild{item: item, fixed: 8, proportion: 0, focus: false})
+		}
+	}
+	return out
 }
 
 // newTableKindView builds a simpleKindView around an already-populated tview
@@ -162,7 +320,7 @@ func populateTableKindView(root *tview.Flex, app kindpkg.App, source kindpkg.Kin
 	}
 	root.AddItem(table, 0, 1, true)
 
-	view := &simpleKindView{flex: root, app: app, source: source}
+	view := &simpleKindView{flex: root, app: app, source: source, table: table}
 
 	table.SetSelectionChangedFunc(func(row, _ int) {
 		if row <= 0 || source == nil {
