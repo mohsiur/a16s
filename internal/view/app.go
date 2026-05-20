@@ -400,6 +400,9 @@ func (app *App) globalInputHandle(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Rune() {
 	case '?':
 		app.showHelpPage()
+	case ':':
+		app.showPalette()
+		return nil
 	}
 
 	// Handle Ctrl+P for profile switcher
