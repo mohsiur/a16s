@@ -70,8 +70,13 @@ func TestCrossKindLambdaToDLQ(t *testing.T) {
 			TargetArn: aws.String("arn:aws:sqs:us-east-1:111:my-dlq"),
 		},
 	}
-	// Restore lambda's state after the test so other tests aren't affected.
-	t.Cleanup(func() { concrete.selected = nil })
+	// Restore lambda + sqs state after the test so other tests aren't affected.
+	t.Cleanup(func() {
+		concrete.selected = nil
+		if k, ok := kindpkg.Get("sqs"); ok {
+			k.Reset()
+		}
+	})
 
 	if err := concrete.dlqAction()(app); err != nil {
 		t.Fatalf("dlqAction err = %v", err)
