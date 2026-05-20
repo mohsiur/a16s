@@ -14,6 +14,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 )
 
+// OnConfigSwitch is called after SwitchAwsConfig finishes resetting clients.
+// view package sets this to kind.ResetAll during app init.
+var OnConfigSwitch func()
+
 type Store struct {
 	*aws.Config
 	ecs            *ecs.Client

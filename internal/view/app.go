@@ -176,6 +176,8 @@ func Start(option Option) error {
 		return err
 	}
 
+	api.OnConfigSwitch = kindpkg.ResetAll
+
 	app.SetInputCapture(app.globalInputHandle)
 
 	if option.Splash {
