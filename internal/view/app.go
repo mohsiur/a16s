@@ -464,13 +464,15 @@ func (app *App) FlashError(msg string) {
 // state. Satisfies kind.App.
 //
 // ECS adapter kinds (Phase 5) return a *noopView and navigate via the existing
-// pages stack themselves; in that case we only record the active kind.
+// pages stack themselves; in that case we leave activeKind nil so table.go's
+// legacy row-change handler keeps updating the header pane as the user scrolls.
 func (app *App) SwitchView(k kindpkg.Kind, v kindpkg.View) error {
-	app.activeKind = k
 	slog.Debug("kind switch", "kind", k.Name())
 	if _, isNoop := v.(*noopView); isNoop {
+		app.activeKind = nil
 		return nil
 	}
+	app.activeKind = k
 	pageName := "kind." + k.Name()
 	app.Pages.AddAndSwitchToPage(pageName, v.Render(), true)
 	return nil
