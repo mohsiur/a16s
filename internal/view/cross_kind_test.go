@@ -53,8 +53,13 @@ func TestCrossKindLambdaToDLQ(t *testing.T) {
 	if k, ok := kindpkg.Get("lambda"); ok {
 		k.Reset()
 	}
-	if k, ok := kindpkg.Get("sqs"); ok {
-		k.Reset()
+	if sk, ok := kindpkg.Get("sqs"); ok {
+		sk.Reset()
+		// Pre-warm the SQS cache so dlqAction's Build takes the sync path —
+		// in production, Preload at app start does this. Without it, Build
+		// returns a loading view and the pre-selection promotion happens on
+		// a goroutine that races with the assertion.
+		sk.(*sqsKind).loadInventory(app)
 	}
 
 	// Use the registered lambdaKind so dlqAction's closure reads the right

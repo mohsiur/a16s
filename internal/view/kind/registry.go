@@ -24,6 +24,11 @@ type App interface {
 	// Back removes the current front kind page (if any) so the previously
 	// visible page is re-shown. Used by Esc on a flat-kind view.
 	Back()
+	// QueueUpdateDraw queues f on the tview event loop and forces a redraw
+	// after it returns. Required by Kinds that Build asynchronously (return
+	// a loading placeholder immediately, then swap in real content once the
+	// background fetch resolves).
+	QueueUpdateDraw(f func()) *tview.Application
 }
 
 // View is what a Kind's Build returns. Intentionally minimal so flat kinds

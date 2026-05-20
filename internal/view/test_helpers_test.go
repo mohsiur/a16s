@@ -3,6 +3,7 @@ package view
 import (
 	"github.com/keidarcy/e1s/internal/api"
 	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
+	"github.com/rivo/tview"
 )
 
 // fakeApp implements kindpkg.App for tests in this package. It records the
@@ -27,3 +28,10 @@ func (f *fakeApp) SwitchView(k kindpkg.Kind, v kindpkg.View) error {
 func (f *fakeApp) FlashError(msg string) { f.flashedMsg = msg }
 
 func (f *fakeApp) Back() {}
+
+func (f *fakeApp) QueueUpdateDraw(fn func()) *tview.Application {
+	if fn != nil {
+		fn()
+	}
+	return nil
+}

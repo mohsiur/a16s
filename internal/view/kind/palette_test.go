@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/keidarcy/e1s/internal/api"
+	"github.com/rivo/tview"
 )
 
 type fakeApp struct {
@@ -26,6 +27,12 @@ func (f *fakeApp) SwitchView(k Kind, v View) error {
 }
 func (f *fakeApp) FlashError(msg string) { f.flashedMsg = msg }
 func (f *fakeApp) Back()                 { f.backCalls++ }
+func (f *fakeApp) QueueUpdateDraw(fn func()) *tview.Application {
+	if fn != nil {
+		fn()
+	}
+	return nil
+}
 
 type buildableKind struct {
 	stubKind
