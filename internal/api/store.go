@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 )
 
@@ -28,6 +29,7 @@ type Store struct {
 	ssm            *ssm.Client
 	account        *account.Client
 	lambda         *lambda.Client
+	sqs            *sqs.Client
 }
 
 func NewStore(profile string, region string) (*Store, error) {
@@ -77,5 +79,11 @@ func (store *Store) initAutoScalingClient() {
 func (store *Store) initLambdaClient() {
 	if store.lambda == nil {
 		store.lambda = lambda.NewFromConfig(*store.Config)
+	}
+}
+
+func (store *Store) initSqsClient() {
+	if store.sqs == nil {
+		store.sqs = sqs.NewFromConfig(*store.Config)
 	}
 }
