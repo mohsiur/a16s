@@ -35,3 +35,5 @@ func (f *fakeApp) QueueUpdateDraw(fn func()) *tview.Application {
 	}
 	return nil
 }
+
+func (f *fakeApp) SetFocus(tview.Primitive) *tview.Application { return nil }
