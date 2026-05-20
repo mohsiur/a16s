@@ -23,11 +23,17 @@ type ddbKind struct {
 	// compute aggregate + per-row detail without re-querying DynamoDB.
 	// `descs` and `descErrs` are parallel to `names` — a nil desc with a
 	// non-nil err means the DescribeTable for that name failed.
+	// `loadDone` is the single-flight latch: nil before the first load, set
+	// to a fresh channel when a load starts, closed when it finishes. This
+	// guarantees concurrent Preload + Build only fetch once and the second
+	// caller waits.
 	mu       sync.RWMutex
 	names    []string
 	descs    []*ddbTypes.TableDescription
 	descErrs []error
 	loaded   bool
+	loadDone chan struct{}
+	loadErr  error
 }
 
 func (k *ddbKind) Name() string { return "ddb" }
@@ -39,6 +45,8 @@ func (k *ddbKind) Reset() {
 	k.descs = nil
 	k.descErrs = nil
 	k.loaded = false
+	k.loadDone = nil
+	k.loadErr = nil
 }
 
 func (k *ddbKind) Selection() any {
@@ -188,52 +196,70 @@ func (k *ddbKind) Preload(app kindpkg.App) {
 }
 
 // loadInventory fetches the table list + descriptions once and caches the
-// result. Subsequent calls are no-ops until Reset() is called (e.g. on
-// profile switch).
+// result. Concurrent callers single-flight on k.loadDone — the first caller
+// runs the fetch and closes the channel; subsequent callers (including
+// Preload + a fast `:ddb`) block on the channel and read the shared result.
+// After Reset() the cycle restarts.
 func (k *ddbKind) loadInventory(app kindpkg.App) error {
-	k.mu.RLock()
+	k.mu.Lock()
 	if k.loaded {
-		k.mu.RUnlock()
+		k.mu.Unlock()
 		return nil
 	}
-	k.mu.RUnlock()
-
-	names, err := app.APIStore().ListTables(context.Background())
-	if err != nil {
+	if k.loadDone != nil {
+		done := k.loadDone
+		k.mu.Unlock()
+		<-done
+		k.mu.RLock()
+		err := k.loadErr
+		k.mu.RUnlock()
 		return err
 	}
+	done := make(chan struct{})
+	k.loadDone = done
+	k.mu.Unlock()
 
-	// Fan out DescribeTable. Sequential is unusable on accounts with >50
-	// tables. Per-row errors are kept parallel to names so Build can flash a
-	// last-error notice; cache stores both descs + errs.
-	descs := make([]*ddbTypes.TableDescription, len(names))
-	errs := make([]error, len(names))
-	g, ctx := errgroup.WithContext(context.Background())
-	g.SetLimit(10)
-	for i, name := range names {
-		i, name := i, name
-		g.Go(func() error {
-			td, derr := app.APIStore().DescribeTable(ctx, name)
-			descs[i] = td
-			errs[i] = derr
-			return nil
-		})
+	names, err := app.APIStore().ListTables(context.Background())
+	var descs []*ddbTypes.TableDescription
+	var errs []error
+	if err == nil {
+		// Fan out DescribeTable. Sequential is unusable on accounts with >50
+		// tables. Per-row errors are kept parallel to names so Build can flash
+		// a last-error notice; cache stores both descs + errs.
+		descs = make([]*ddbTypes.TableDescription, len(names))
+		errs = make([]error, len(names))
+		g, ctx := errgroup.WithContext(context.Background())
+		g.SetLimit(10)
+		for i, name := range names {
+			i, name := i, name
+			g.Go(func() error {
+				td, derr := app.APIStore().DescribeTable(ctx, name)
+				descs[i] = td
+				errs[i] = derr
+				return nil
+			})
+		}
+		_ = g.Wait()
 	}
-	_ = g.Wait()
 
 	k.mu.Lock()
-	k.names = names
-	k.descs = descs
-	k.descErrs = errs
-	k.loaded = true
+	k.loadErr = err
+	if err == nil {
+		k.names = names
+		k.descs = descs
+		k.descErrs = errs
+		k.loaded = true
+	} else {
+		// Reset loadDone on error so a future call can retry; closing the
+		// channel below still wakes anyone currently waiting.
+		k.loadDone = nil
+	}
 	k.mu.Unlock()
-	return nil
+	close(done)
+	return err
 }
 
-func (k *ddbKind) Build(app kindpkg.App) (kindpkg.View, error) {
-	if err := k.loadInventory(app); err != nil {
-		return nil, err
-	}
+func (k *ddbKind) buildTable(app kindpkg.App) *tview.Table {
 	k.mu.RLock()
 	names := k.names
 	descs := k.descs
@@ -286,7 +312,19 @@ func (k *ddbKind) Build(app kindpkg.App) (kindpkg.View, error) {
 		app.FlashError("describe " + lastErrName + ": " + lastErr.Error())
 	}
 
-	return newTableKindView(app, k, table), nil
+	return table
+}
+
+func (k *ddbKind) Build(app kindpkg.App) (kindpkg.View, error) {
+	k.mu.RLock()
+	loaded := k.loaded
+	k.mu.RUnlock()
+	if loaded {
+		return newTableKindView(app, k, k.buildTable(app)), nil
+	}
+	return newLoadingTableKindView(app, k, func() error {
+		return k.loadInventory(app)
+	}, func() *tview.Table { return k.buildTable(app) }), nil
 }
 
 // AggregateInfo / SelectionDetail satisfy kindpkg.Informer.

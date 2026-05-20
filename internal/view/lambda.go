@@ -21,9 +21,15 @@ type lambdaKind struct {
 	selected *lambdaTypes.FunctionConfiguration
 	// inventory captured during Build / Preload so Informer methods can
 	// compute aggregate + per-row detail without re-listing functions.
-	mu     sync.RWMutex
-	fns    []lambdaTypes.FunctionConfiguration
-	loaded bool
+	// `loadDone` is the single-flight latch: nil before the first load, set
+	// to a fresh channel when a load starts, closed when it finishes. This
+	// guarantees concurrent Preload + Build only fetch once and the second
+	// caller waits.
+	mu       sync.RWMutex
+	fns      []lambdaTypes.FunctionConfiguration
+	loaded   bool
+	loadDone chan struct{}
+	loadErr  error
 }
 
 func (k *lambdaKind) Name() string { return "lambda" }
@@ -34,6 +40,8 @@ func (k *lambdaKind) Reset() {
 	k.selected = nil
 	k.fns = nil
 	k.loaded = false
+	k.loadDone = nil
+	k.loadErr = nil
 }
 
 func (k *lambdaKind) Selection() any {
@@ -179,32 +187,47 @@ func (k *lambdaKind) Preload(app kindpkg.App) {
 }
 
 // loadInventory fetches the function list once and caches the result.
-// Subsequent calls are no-ops until Reset() is called (e.g. on profile
-// switch).
+// Concurrent callers single-flight on k.loadDone — the first caller runs
+// the fetch and closes the channel; subsequent callers (including Preload
+// + a fast `:lambda`) block on the channel and read the shared result.
+// After Reset() the cycle restarts.
 func (k *lambdaKind) loadInventory(app kindpkg.App) error {
-	k.mu.RLock()
+	k.mu.Lock()
 	if k.loaded {
-		k.mu.RUnlock()
+		k.mu.Unlock()
 		return nil
 	}
-	k.mu.RUnlock()
-
-	fns, err := app.APIStore().ListFunctions(context.Background())
-	if err != nil {
+	if k.loadDone != nil {
+		done := k.loadDone
+		k.mu.Unlock()
+		<-done
+		k.mu.RLock()
+		err := k.loadErr
+		k.mu.RUnlock()
 		return err
 	}
+	done := make(chan struct{})
+	k.loadDone = done
+	k.mu.Unlock()
+
+	fns, err := app.APIStore().ListFunctions(context.Background())
 
 	k.mu.Lock()
-	k.fns = fns
-	k.loaded = true
+	k.loadErr = err
+	if err == nil {
+		k.fns = fns
+		k.loaded = true
+	} else {
+		// Reset loadDone on error so a future call can retry; closing the
+		// channel below still wakes anyone currently waiting.
+		k.loadDone = nil
+	}
 	k.mu.Unlock()
-	return nil
+	close(done)
+	return err
 }
 
-func (k *lambdaKind) Build(app kindpkg.App) (kindpkg.View, error) {
-	if err := k.loadInventory(app); err != nil {
-		return nil, err
-	}
+func (k *lambdaKind) buildTable() *tview.Table {
 	k.mu.RLock()
 	fns := k.fns
 	k.mu.RUnlock()
@@ -227,13 +250,24 @@ func (k *lambdaKind) Build(app kindpkg.App) (kindpkg.View, error) {
 		for col, c := range cells {
 			cell := tview.NewTableCell(c)
 			if col == 0 {
-				cell.SetReference(&copyFn) // stored on column 0 reference; SelectionChangedFunc reads it
+				cell.SetReference(&copyFn)
 			}
 			table.SetCell(row+1, col, cell)
 		}
 	}
+	return table
+}
 
-	return newTableKindView(app, k, table), nil
+func (k *lambdaKind) Build(app kindpkg.App) (kindpkg.View, error) {
+	k.mu.RLock()
+	loaded := k.loaded
+	k.mu.RUnlock()
+	if loaded {
+		return newTableKindView(app, k, k.buildTable()), nil
+	}
+	return newLoadingTableKindView(app, k, func() error {
+		return k.loadInventory(app)
+	}, k.buildTable), nil
 }
 
 // openLogGroupTail opens a read-only log-tail view for the given CloudWatch

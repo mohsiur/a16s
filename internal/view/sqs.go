@@ -28,10 +28,16 @@ type sqsKind struct {
 	selectedURL string
 	// inventory is captured during Build / Preload so Informer methods can
 	// compute aggregate + per-row detail without re-querying SQS.
+	// `loadDone` is the single-flight latch: nil before the first load, set
+	// to a fresh channel when a load starts, closed when it finishes. This
+	// guarantees concurrent Preload + Build only fetch once and the second
+	// caller waits.
 	mu         sync.RWMutex
 	urls       []string
 	attrsByURL map[string]map[string]string
 	loaded     bool
+	loadDone   chan struct{}
+	loadErr    error
 }
 
 func (k *sqsKind) Name() string {
@@ -45,6 +51,8 @@ func (k *sqsKind) Reset() {
 	k.urls = nil
 	k.attrsByURL = nil
 	k.loaded = false
+	k.loadDone = nil
+	k.loadErr = nil
 }
 
 func (k *sqsKind) Selection() any { return k.selectedURL }
@@ -153,48 +161,67 @@ func (k *sqsKind) Preload(app kindpkg.App) {
 }
 
 // loadInventory fetches the queue list + attributes once and caches the
-// result. Subsequent calls are no-ops until Reset() is called (e.g. on
-// profile switch).
+// result. Concurrent callers single-flight on k.loadDone — the first caller
+// runs the fetch and closes the channel; subsequent callers (including
+// Preload + a fast `:sqs`) block on the channel and read the shared result.
+// After Reset() the cycle restarts.
 func (k *sqsKind) loadInventory(app kindpkg.App) error {
-	k.mu.RLock()
+	k.mu.Lock()
 	if k.loaded {
-		k.mu.RUnlock()
+		k.mu.Unlock()
 		return nil
 	}
-	k.mu.RUnlock()
-
-	urls, err := app.APIStore().ListQueues(context.Background())
-	if err != nil {
+	if k.loadDone != nil {
+		done := k.loadDone
+		k.mu.Unlock()
+		<-done
+		k.mu.RLock()
+		err := k.loadErr
+		k.mu.RUnlock()
 		return err
 	}
-	attrs := make([]map[string]string, len(urls))
-	g, ctx := errgroup.WithContext(context.Background())
-	g.SetLimit(10)
-	for i, url := range urls {
-		i, url := i, url
-		g.Go(func() error {
-			a, _ := app.APIStore().GetQueueAttributes(ctx, url)
-			attrs[i] = a
-			return nil
-		})
+	done := make(chan struct{})
+	k.loadDone = done
+	k.mu.Unlock()
+
+	urls, err := app.APIStore().ListQueues(context.Background())
+	var attrsByURL map[string]map[string]string
+	if err == nil {
+		attrs := make([]map[string]string, len(urls))
+		g, ctx := errgroup.WithContext(context.Background())
+		g.SetLimit(10)
+		for i, url := range urls {
+			i, url := i, url
+			g.Go(func() error {
+				a, _ := app.APIStore().GetQueueAttributes(ctx, url)
+				attrs[i] = a
+				return nil
+			})
+		}
+		_ = g.Wait()
+		attrsByURL = make(map[string]map[string]string, len(urls))
+		for i, url := range urls {
+			attrsByURL[url] = attrs[i]
+		}
 	}
-	_ = g.Wait()
 
 	k.mu.Lock()
-	k.urls = urls
-	k.attrsByURL = make(map[string]map[string]string, len(urls))
-	for i, url := range urls {
-		k.attrsByURL[url] = attrs[i]
+	k.loadErr = err
+	if err == nil {
+		k.urls = urls
+		k.attrsByURL = attrsByURL
+		k.loaded = true
+	} else {
+		// Reset loadDone on error so a future call can retry; closing the
+		// channel below still wakes anyone currently waiting.
+		k.loadDone = nil
 	}
-	k.loaded = true
 	k.mu.Unlock()
-	return nil
+	close(done)
+	return err
 }
 
-func (k *sqsKind) Build(app kindpkg.App) (kindpkg.View, error) {
-	if err := k.loadInventory(app); err != nil {
-		return nil, err
-	}
+func (k *sqsKind) buildTable() *tview.Table {
 	k.mu.RLock()
 	urls := k.urls
 	attrsByURL := k.attrsByURL
@@ -225,8 +252,6 @@ func (k *sqsKind) Build(app kindpkg.App) (kindpkg.View, error) {
 		}
 	}
 
-	v := newTableKindView(app, k, table)
-
 	// Pre-selection: SetSelection may have been called with either a full URL
 	// (from a previous row-change) or a bare queue name (from cross-kind nav
 	// from Lambda DLQ). Match against the row's reference (full URL) directly,
@@ -246,7 +271,19 @@ func (k *sqsKind) Build(app kindpkg.App) (kindpkg.View, error) {
 		}
 	}
 
-	return v, nil
+	return table
+}
+
+func (k *sqsKind) Build(app kindpkg.App) (kindpkg.View, error) {
+	k.mu.RLock()
+	loaded := k.loaded
+	k.mu.RUnlock()
+	if loaded {
+		return newTableKindView(app, k, k.buildTable()), nil
+	}
+	return newLoadingTableKindView(app, k, func() error {
+		return k.loadInventory(app)
+	}, k.buildTable), nil
 }
 
 // AggregateInfo / SelectionDetail satisfy kindpkg.Informer.

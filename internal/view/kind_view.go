@@ -6,6 +6,47 @@ import (
 	"github.com/rivo/tview"
 )
 
+// newLoadingTableKindView shows a centered "Loading <name>…" placeholder,
+// then in a goroutine calls `load`. On success, `buildTable` runs on the
+// tview event loop and its result populates the same root Flex via
+// populateTableKindView. On error, the placeholder is replaced with an
+// error message. Esc on the placeholder calls app.Back().
+//
+// `load` runs OFF the event loop and must not touch tview state.
+// `buildTable` runs ON the event loop and may freely build/mutate widgets.
+func newLoadingTableKindView(app kindpkg.App, source kindpkg.Kind, load func() error, buildTable func() *tview.Table) *simpleKindView {
+	root := tview.NewFlex().SetDirection(tview.FlexRow)
+	loading := tview.NewTextView().
+		SetTextAlign(tview.AlignCenter).
+		SetText("\nLoading " + source.Name() + "…\n")
+	root.AddItem(loading, 0, 1, true)
+
+	view := &simpleKindView{flex: root, app: app, source: source}
+	root.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if view.OnKey(event) {
+			return nil
+		}
+		return event
+	})
+
+	go func() {
+		err := load()
+		app.QueueUpdateDraw(func() {
+			if err != nil {
+				root.Clear()
+				errView := tview.NewTextView().
+					SetTextAlign(tview.AlignCenter).
+					SetText("\nFailed to load " + source.Name() + ":\n" + err.Error())
+				root.AddItem(errView, 0, 1, true)
+				return
+			}
+			populateTableKindView(root, app, source, buildTable())
+		})
+	}()
+
+	return view
+}
+
 // newTextSubView wraps a tview.Primitive (typically a TextView, optionally
 // inside its own Flex) into a simpleKindView whose Esc handler calls
 // app.Back(). Sub-views (logs, peek, scan, config, invoke result) need this
@@ -76,25 +117,33 @@ func (s *simpleKindView) OnKey(event *tcell.EventKey) (handled bool) {
 }
 
 // newTableKindView builds a simpleKindView around an already-populated tview
-// Table. It wires:
+// Table. See populateTableKindView for the wiring contract — this is the
+// from-scratch entrypoint used by synchronous Build paths.
+func newTableKindView(app kindpkg.App, source kindpkg.Kind, table *tview.Table) *simpleKindView {
+	root := tview.NewFlex().SetDirection(tview.FlexRow)
+	return populateTableKindView(root, app, source, table)
+}
+
+// populateTableKindView clears `root` and populates it with the standard
+// flat-kind layout: optional Informer header (8 rows fixed) + the populated
+// table (flex 1). Wires:
 //   - selectable mode (defensive — table.go already does this for legacy ECS)
 //   - SetFixed(1, 0) so the header row stays visible while scrolling
 //   - SelectionChangedFunc that pushes the row's column-0 reference back to
 //     the source Kind via SetSelection (this is how flat kinds learn about
 //     the user's cursor without going through the legacy ECS view struct)
-//   - SetInputCapture that delegates to the simpleKindView's OnKey, which in
-//     turn calls the kind's PrimaryAction / SecondaryActions / Esc -> Back.
-//   - if the source implements kindpkg.Informer, an info pane above the
-//     table with two columns (aggregate stats + selection detail), refreshed
-//     on selection change.
+//   - SetInputCapture on both root and table that delegates to the
+//     simpleKindView's OnKey (PrimaryAction / SecondaryActions / Esc->Back).
 //
-// This is the single place flat kinds get their selection + key wiring; SQS
-// and DynamoDB phases pick it up for free.
-func newTableKindView(app kindpkg.App, source kindpkg.Kind, table *tview.Table) *simpleKindView {
+// Async Build paths reuse this to swap a loading placeholder root for the
+// real table without rebuilding the parent Flex.
+func populateTableKindView(root *tview.Flex, app kindpkg.App, source kindpkg.Kind, table *tview.Table) *simpleKindView {
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 
-	root := tview.NewFlex().SetDirection(tview.FlexRow)
+	root.Clear()
+	root.SetDirection(tview.FlexRow)
+
 	informer, hasInfo := source.(kindpkg.Informer)
 	var detailView *tview.TextView
 	if hasInfo {
@@ -105,8 +154,6 @@ func newTableKindView(app kindpkg.App, source kindpkg.Kind, table *tview.Table) 
 		header := tview.NewFlex().
 			AddItem(aggView, 0, 1, false).
 			AddItem(detailView, 0, 1, false)
-		// 8 rows is enough for ~5 lines of content + borders + title; tune
-		// per kind later if needed.
 		root.AddItem(header, 8, 0, false)
 	}
 	root.AddItem(table, 0, 1, true)
@@ -126,11 +173,13 @@ func newTableKindView(app kindpkg.App, source kindpkg.Kind, table *tview.Table) 
 			detailView.SetText(informer.SelectionDetail())
 		}
 	})
-	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	capture := func(event *tcell.EventKey) *tcell.EventKey {
 		if view.OnKey(event) {
 			return nil
 		}
 		return event
-	})
+	}
+	table.SetInputCapture(capture)
+	root.SetInputCapture(capture)
 	return view
 }
