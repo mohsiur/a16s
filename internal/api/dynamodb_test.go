@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -35,6 +36,88 @@ func TestListTablesHappyPath(t *testing.T) {
 	}
 	if len(got) != 2 || got[0] != "users" {
 		t.Fatalf("got %v", got)
+	}
+}
+
+// TestListTablesTwoPages exercises the pagination loop: the first response
+// carries a LastEvaluatedTableName, the second does not, and the returned
+// slice contains entries from both pages in order.
+func TestListTablesTwoPages(t *testing.T) {
+	calls := 0
+	store := newStoreWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+		calls++
+		switch calls {
+		case 1:
+			return smithymiddleware.FinalizeOutput{
+				Result: &dynamodb.ListTablesOutput{
+					TableNames:             []string{"users"},
+					LastEvaluatedTableName: aws.String("users"),
+				},
+			}, smithymiddleware.Metadata{}, nil
+		case 2:
+			return smithymiddleware.FinalizeOutput{
+				Result: &dynamodb.ListTablesOutput{
+					TableNames: []string{"events"},
+				},
+			}, smithymiddleware.Metadata{}, nil
+		}
+		t.Fatalf("unexpected call %d", calls)
+		return smithymiddleware.FinalizeOutput{}, smithymiddleware.Metadata{}, nil
+	})
+
+	got, err := store.ListTables(context.Background())
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if len(got) != 2 || got[0] != "users" || got[1] != "events" {
+		t.Fatalf("got %v; want [users events]", got)
+	}
+}
+
+// TestListTablesErrorAfterFirstPage asserts the partial-success contract
+// from dynamodb.go: pagination errors after at least one page has been
+// fetched return what we have with a nil error.
+func TestListTablesErrorAfterFirstPage(t *testing.T) {
+	calls := 0
+	store := newStoreWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+		calls++
+		switch calls {
+		case 1:
+			return smithymiddleware.FinalizeOutput{
+				Result: &dynamodb.ListTablesOutput{
+					TableNames:             []string{"users"},
+					LastEvaluatedTableName: aws.String("users"),
+				},
+			}, smithymiddleware.Metadata{}, nil
+		case 2:
+			return smithymiddleware.FinalizeOutput{}, smithymiddleware.Metadata{}, errors.New("page-2 boom")
+		}
+		t.Fatalf("unexpected call %d", calls)
+		return smithymiddleware.FinalizeOutput{}, smithymiddleware.Metadata{}, nil
+	})
+
+	got, err := store.ListTables(context.Background())
+	if err != nil {
+		t.Fatalf("err = %v; want nil for partial-page failure", err)
+	}
+	if len(got) != 1 || got[0] != "users" {
+		t.Fatalf("got %v; want [users]", got)
+	}
+}
+
+// TestListTablesFirstPageErrorBubbles asserts the inverse: an error on the
+// very first page returns (nil, err) — partial success only kicks in once
+// at least one page has succeeded.
+func TestListTablesFirstPageErrorBubbles(t *testing.T) {
+	store := newStoreWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+		return smithymiddleware.FinalizeOutput{}, smithymiddleware.Metadata{}, errors.New("boom")
+	})
+	got, err := store.ListTables(context.Background())
+	if err == nil {
+		t.Fatalf("expected error; got %v", got)
+	}
+	if got != nil {
+		t.Fatalf("got = %v; want nil on first-page error", got)
 	}
 }
 
