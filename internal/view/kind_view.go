@@ -21,16 +21,6 @@ func (p *pseudoKind) Breadcrumb() string                      { return p.name }
 func (p *pseudoKind) PrimaryAction() kindpkg.Action           { return nil }
 func (p *pseudoKind) SecondaryActions() []kindpkg.Binding     { return nil }
 
-// joinLines concatenates a slice of strings into one, appending a newline
-// after each entry. Used by log-tail action helpers.
-func joinLines(in []string) string {
-	out := ""
-	for _, s := range in {
-		out += s + "\n"
-	}
-	return out
-}
-
 // simpleKindView is the default kind.View for table-based flat kinds.
 type simpleKindView struct {
 	flex   *tview.Flex
