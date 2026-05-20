@@ -158,6 +158,12 @@ type simpleKindView struct {
 
 	sortColumn int
 	sortOrder  string
+
+	// bindings allows sub-views (e.g. DDB index list) to add their own key
+	// bindings without registering a Kind. They run after F-key sort but
+	// before the host Kind's secondary actions, so a sub-view can shadow a
+	// host binding. Empty for host views.
+	bindings []kindpkg.Binding
 }
 
 func (s *simpleKindView) Render() *tview.Flex { return s.flex }
@@ -173,6 +179,12 @@ func (s *simpleKindView) OnKey(event *tcell.EventKey) (handled bool) {
 		col := int(event.Key() - tcell.KeyF1)
 		s.sortByColumn(col)
 		return true
+	}
+	for _, b := range s.bindings {
+		if event.Rune() == b.Key && b.Run != nil {
+			b.Run(s.app)
+			return true
+		}
 	}
 	if s.source == nil {
 		return false

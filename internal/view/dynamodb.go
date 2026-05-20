@@ -76,32 +76,165 @@ func (k *ddbKind) PrimaryAction() kindpkg.Action {
 			app.FlashError("no table selected")
 			return nil
 		}
-		tableName := aws.ToString(k.selected.TableName)
-		items, err := app.APIStore().ScanFirstPage(context.Background(), tableName, 25)
-		if err != nil {
-			app.FlashError(err.Error())
-			return err
-		}
-		flex := renderScanResults(tableName, items)
-		return app.SwitchView(
-			&pseudoKind{name: "scan:" + tableName},
-			newTextSubView(app, flex),
-		)
+		return openIndexList(app, k.selected)
 	}
 }
 
-// renderScanResults turns a slice of DynamoDB items into a tview Flex. Items
-// have a different attribute set in general; we union all attribute names
-// across items, prefer key attributes (selected.KeySchema) as the leftmost
-// columns, then alphabetical for the rest. Cells render the underlying
-// AttributeValue as a short string. Long values are truncated with "…".
-func renderScanResults(tableName string, items []map[string]ddbTypes.AttributeValue) *tview.Flex {
+// ddbIndex is a flat representation of either the base table or a GSI/LSI:
+// `name` is "" for the base table, otherwise the index name; partitionKey is
+// the hash key attribute name (used by the query action).
+type ddbIndex struct {
+	name         string
+	kind         string // "BASE", "GSI", "LSI"
+	partitionKey string
+	sortKey      string
+}
+
+// collectIndexes returns the base table first, then GSIs (alphabetical), then
+// LSIs (alphabetical). The base-first ordering is the user-visible ask: scan
+// shows indexes with the base table on top.
+func collectIndexes(td *ddbTypes.TableDescription) []ddbIndex {
+	out := []ddbIndex{{
+		name:         "",
+		kind:         "BASE",
+		partitionKey: keyAttr(td.KeySchema, ddbTypes.KeyTypeHash),
+		sortKey:      keyAttr(td.KeySchema, ddbTypes.KeyTypeRange),
+	}}
+	gsis := make([]ddbIndex, 0, len(td.GlobalSecondaryIndexes))
+	for _, gsi := range td.GlobalSecondaryIndexes {
+		gsis = append(gsis, ddbIndex{
+			name:         aws.ToString(gsi.IndexName),
+			kind:         "GSI",
+			partitionKey: keyAttr(gsi.KeySchema, ddbTypes.KeyTypeHash),
+			sortKey:      keyAttr(gsi.KeySchema, ddbTypes.KeyTypeRange),
+		})
+	}
+	sort.Slice(gsis, func(i, j int) bool { return gsis[i].name < gsis[j].name })
+	out = append(out, gsis...)
+	lsis := make([]ddbIndex, 0, len(td.LocalSecondaryIndexes))
+	for _, lsi := range td.LocalSecondaryIndexes {
+		lsis = append(lsis, ddbIndex{
+			name:         aws.ToString(lsi.IndexName),
+			kind:         "LSI",
+			partitionKey: keyAttr(lsi.KeySchema, ddbTypes.KeyTypeHash),
+			sortKey:      keyAttr(lsi.KeySchema, ddbTypes.KeyTypeRange),
+		})
+	}
+	sort.Slice(lsis, func(i, j int) bool { return lsis[i].name < lsis[j].name })
+	out = append(out, lsis...)
+	return out
+}
+
+func keyAttr(schema []ddbTypes.KeySchemaElement, kt ddbTypes.KeyType) string {
+	for _, e := range schema {
+		if e.KeyType == kt {
+			return aws.ToString(e.AttributeName)
+		}
+	}
+	return ""
+}
+
+// openIndexList renders Index | Type | PartitionKey | SortKey for the table's
+// base + GSIs + LSIs. Enter scans the chosen index; `q` queries it.
+func openIndexList(app kindpkg.App, td *ddbTypes.TableDescription) error {
+	tableName := aws.ToString(td.TableName)
+	idxs := collectIndexes(td)
+	table := tview.NewTable().SetBorders(false)
+	headers := []string{"Index", "Type", "PartitionKey", "SortKey"}
+	for col, h := range headers {
+		table.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false).SetTextColor(tcell.ColorYellow))
+	}
+	for r, idx := range idxs {
+		display := idx.name
+		if idx.name == "" {
+			display = "(base table)"
+		}
+		cells := []string{display, idx.kind, idx.partitionKey, idx.sortKey}
+		copyIdx := idx
+		for col, c := range cells {
+			cell := tview.NewTableCell(c)
+			if col == 0 {
+				cell.SetReference(copyIdx)
+			}
+			table.SetCell(r+1, col, cell)
+		}
+	}
+	view := newTableSubView(app, table, "indexes "+tableName, func(row int) {
+		idx, _ := table.GetCell(row, 0).GetReference().(ddbIndex)
+		_ = openScanResults(app, tableName, idx)
+	})
+	view.bindings = []kindpkg.Binding{{Key: 'q', Label: "query", Run: func(app kindpkg.App) error {
+		row, _ := table.GetSelection()
+		if row < 1 {
+			app.FlashError("no index selected")
+			return nil
+		}
+		idx, _ := table.GetCell(row, 0).GetReference().(ddbIndex)
+		return openQueryPrompt(app, tableName, idx)
+	}}}
+	return app.SwitchView(&pseudoKind{name: "indexes:" + tableName}, view)
+}
+
+func openScanResults(app kindpkg.App, tableName string, idx ddbIndex) error {
+	items, err := app.APIStore().ScanIndexFirstPage(context.Background(), tableName, idx.name, 25)
+	if err != nil {
+		app.FlashError(err.Error())
+		return err
+	}
+	title := "scan " + tableName
+	if idx.name != "" {
+		title += " / " + idx.name
+	}
+	view := buildScanResultsView(app, title, items)
+	return app.SwitchView(&pseudoKind{name: "scan:" + tableName + ":" + idx.name}, view)
+}
+
+// openQueryPrompt mounts a one-line input above the empty results area, asking
+// for the partition-key value. Submitting runs QueryEquality and replaces the
+// flex with a results table. Esc returns to the index list.
+func openQueryPrompt(app kindpkg.App, tableName string, idx ddbIndex) error {
+	if idx.partitionKey == "" {
+		app.FlashError("index has no partition key")
+		return nil
+	}
+	flex := tview.NewFlex().SetDirection(tview.FlexRow)
+	prompt := tview.NewInputField().
+		SetLabel(idx.partitionKey + " = ").
+		SetFieldWidth(0)
+	status := tview.NewTextView().SetText("Enter to run, Esc to cancel")
+	flex.AddItem(prompt, 1, 0, true)
+	flex.AddItem(status, 1, 0, false)
+	view := newTextSubView(app, flex)
+	prompt.SetDoneFunc(func(key tcell.Key) {
+		if key != tcell.KeyEnter {
+			return
+		}
+		val := prompt.GetText()
+		items, err := app.APIStore().QueryEquality(context.Background(), tableName, idx.name, idx.partitionKey, val, 25)
+		if err != nil {
+			app.FlashError(err.Error())
+			return
+		}
+		title := fmt.Sprintf("query %s [%s = %q]", tableName, idx.partitionKey, val)
+		if idx.name != "" {
+			title = fmt.Sprintf("query %s/%s [%s = %q]", tableName, idx.name, idx.partitionKey, val)
+		}
+		results := buildScanResultsView(app, title, items)
+		_ = app.SwitchView(&pseudoKind{name: "query:" + tableName + ":" + idx.name}, results)
+	})
+	return app.SwitchView(&pseudoKind{name: "query-prompt:" + tableName + ":" + idx.name}, view)
+}
+
+// buildScanResultsView turns a slice of DynamoDB items into a sortable table
+// sub-view (or a "(no items)" TextView when the result set is empty). Header
+// row + each item row preserve item attributes; missing attributes render as
+// empty cells.
+func buildScanResultsView(app kindpkg.App, title string, items []map[string]ddbTypes.AttributeValue) *simpleKindView {
 	if len(items) == 0 {
 		tv := tview.NewTextView().SetText("(no items)")
-		tv.SetBorder(true).SetTitle(" scan " + tableName + " (first 25) ")
-		return tview.NewFlex().AddItem(tv, 0, 1, true)
+		tv.SetBorder(true).SetTitle(" " + title + " ")
+		return newTextSubView(app, tview.NewFlex().AddItem(tv, 0, 1, true))
 	}
-
 	attrSet := map[string]struct{}{}
 	for _, it := range items {
 		for k := range it {
@@ -115,8 +248,6 @@ func renderScanResults(tableName string, items []map[string]ddbTypes.AttributeVa
 	sort.Strings(attrs)
 
 	scanTable := tview.NewTable().SetBorders(false)
-	scanTable.SetSelectable(true, false)
-	scanTable.SetFixed(1, 0)
 	for col, h := range attrs {
 		scanTable.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false).SetTextColor(tcell.ColorYellow))
 	}
@@ -129,9 +260,7 @@ func renderScanResults(tableName string, items []map[string]ddbTypes.AttributeVa
 			scanTable.SetCell(r+1, col, tview.NewTableCell(val).SetMaxWidth(40))
 		}
 	}
-	scanTable.SetTitle(" scan " + tableName + " (" + fmt.Sprintf("%d", len(items)) + " items, first 25) ")
-	scanTable.SetBorder(true)
-	return tview.NewFlex().AddItem(scanTable, 0, 1, true)
+	return newTableSubView(app, scanTable, fmt.Sprintf("%s (%d items, first 25)", title, len(items)), nil)
 }
 
 // ddbAttrToString renders a DynamoDB AttributeValue as a short string
