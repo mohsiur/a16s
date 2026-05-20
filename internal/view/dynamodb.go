@@ -36,7 +36,8 @@ type ddbKind struct {
 	loadErr  error
 }
 
-func (k *ddbKind) Name() string { return "ddb" }
+func (k *ddbKind) Name() string      { return "ddb" }
+func (k *ddbKind) Aliases() []string { return []string{"dynamodb"} }
 func (k *ddbKind) Reset() {
 	k.mu.Lock()
 	defer k.mu.Unlock()

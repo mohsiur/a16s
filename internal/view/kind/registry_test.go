@@ -73,3 +73,71 @@ func TestAllReturnsSortedByName(t *testing.T) {
 		}
 	}
 }
+
+type aliasedStub struct {
+	stubKind
+	aliases []string
+}
+
+func (a *aliasedStub) Aliases() []string { return a.aliases }
+
+func TestAliasResolvesToSameKind(t *testing.T) {
+	resetRegistryForTest()
+	k := &aliasedStub{stubKind: stubKind{name: "ddb"}, aliases: []string{"dynamodb"}}
+	Register(k)
+
+	canonical, ok := Get("ddb")
+	if !ok || canonical != k {
+		t.Fatalf("Get(\"ddb\") = %v, %v; want %v, true", canonical, ok, k)
+	}
+	alias, ok := Get("dynamodb")
+	if !ok || alias != k {
+		t.Fatalf("Get(\"dynamodb\") = %v, %v; want %v, true", alias, ok, k)
+	}
+}
+
+func TestAllDedupesAliases(t *testing.T) {
+	resetRegistryForTest()
+	Register(&aliasedStub{stubKind: stubKind{name: "ddb"}, aliases: []string{"dynamodb"}})
+	Register(&stubKind{name: "lambda"})
+
+	got := All()
+	if len(got) != 2 {
+		t.Fatalf("All() len = %d; want 2", len(got))
+	}
+	names := []string{got[0].Name(), got[1].Name()}
+	want := []string{"ddb", "lambda"}
+	for i, n := range names {
+		if n != want[i] {
+			t.Fatalf("All()[%d].Name() = %q; want %q", i, n, want[i])
+		}
+	}
+}
+
+func TestNamesIncludesAliases(t *testing.T) {
+	resetRegistryForTest()
+	Register(&aliasedStub{stubKind: stubKind{name: "ddb"}, aliases: []string{"dynamodb"}})
+	Register(&stubKind{name: "lambda"})
+
+	got := Names()
+	want := []string{"ddb", "dynamodb", "lambda"}
+	if len(got) != len(want) {
+		t.Fatalf("Names() = %v; want %v", got, want)
+	}
+	for i, n := range got {
+		if n != want[i] {
+			t.Fatalf("Names()[%d] = %q; want %q", i, n, want[i])
+		}
+	}
+}
+
+func TestRegisterAliasCollisionPanics(t *testing.T) {
+	resetRegistryForTest()
+	Register(&stubKind{name: "dynamodb"})
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic when alias collides with existing name; got nil")
+		}
+	}()
+	Register(&aliasedStub{stubKind: stubKind{name: "ddb"}, aliases: []string{"dynamodb"}})
+}

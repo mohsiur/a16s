@@ -94,6 +94,14 @@ type Preloader interface {
 	Preload(app App)
 }
 
+// Aliaser is an optional companion interface a Kind can implement to expose
+// extra names that resolve to the same Kind via Get(). For example, ddb
+// returns []string{"dynamodb"}. Aliases are also surfaced by Names() so the
+// palette autocomplete cycles through them.
+type Aliaser interface {
+	Aliases() []string
+}
+
 // PreloadAll fans out Preload across every registered Kind that opts in.
 // Each Preload runs in its own goroutine; this function does not wait. Call
 // from app startup right after AWS config resolves.
@@ -105,30 +113,67 @@ func PreloadAll(app App) {
 	}
 }
 
+// registry maps every name (canonical Name() and Aliases()) to its Kind.
+// aliasOwner records the canonical name for a given alias so All()
+// deduplicates and Names() can include aliases without double-counting.
 var registry = map[string]Kind{}
+var aliasOwner = map[string]string{}
 
-// Register adds a Kind under its Name(). Panics on duplicate registration —
-// duplicates are a programming error caught at startup.
+// Register adds a Kind under its Name() and any Aliases(). Panics on
+// duplicate registration — duplicates are a programming error caught at
+// startup.
 func Register(k Kind) {
-	if _, exists := registry[k.Name()]; exists {
-		panic("kind already registered: " + k.Name())
+	name := k.Name()
+	if _, exists := registry[name]; exists {
+		panic("kind already registered: " + name)
 	}
-	registry[k.Name()] = k
+	registry[name] = k
+	aliasOwner[name] = name
+	if a, ok := k.(Aliaser); ok {
+		for _, alias := range a.Aliases() {
+			if _, exists := registry[alias]; exists {
+				panic("kind alias collides: " + alias)
+			}
+			registry[alias] = k
+			aliasOwner[alias] = name
+		}
+	}
 }
 
-// Get returns the Kind registered under name, if any.
+// Get returns the Kind registered under name (canonical or alias).
 func Get(name string) (Kind, bool) {
 	k, ok := registry[name]
 	return k, ok
 }
 
-// All returns every registered Kind, sorted by Name() for stable display.
+// All returns every registered Kind exactly once (deduped by canonical
+// Name()), sorted alphabetically. Aliases do not produce extra entries.
 func All() []Kind {
+	seen := map[string]struct{}{}
 	out := make([]Kind, 0, len(registry))
-	for _, k := range registry {
+	for n, k := range registry {
+		canonical := aliasOwner[n]
+		if _, dup := seen[canonical]; dup {
+			continue
+		}
+		if n != canonical {
+			continue
+		}
+		seen[canonical] = struct{}{}
 		out = append(out, k)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name() < out[j].Name() })
+	return out
+}
+
+// Names returns every name the palette accepts — canonical names plus
+// aliases — sorted alphabetically. Used by the palette's autocomplete.
+func Names() []string {
+	out := make([]string, 0, len(registry))
+	for n := range registry {
+		out = append(out, n)
+	}
+	sort.Strings(out)
 	return out
 }
 
@@ -145,4 +190,5 @@ func ResetAll() {
 // internal tests across files can use it without an export_test.go dance.
 func resetRegistryForTest() {
 	registry = map[string]Kind{}
+	aliasOwner = map[string]string{}
 }
