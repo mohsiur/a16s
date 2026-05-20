@@ -159,3 +159,34 @@ func (store *Store) GetLogStreamLogs(tdArn *string, taskId string, containerName
 	}
 	return logs, nil
 }
+
+// GetLogGroupTail returns the most recent `limit` events from the latest
+// log stream of the given log group, formatted with timestamp prefixes.
+func (store *Store) GetLogGroupTail(ctx context.Context, logGroup string, limit int32) ([]string, error) {
+	store.initCloudwatchlogsClient()
+	streams, err := store.cloudwatchlogs.DescribeLogStreams(ctx, &cloudwatchlogs.DescribeLogStreamsInput{
+		LogGroupName: &logGroup,
+		Limit:        aws.Int32(1),
+		OrderBy:      cloudwatchlogsTypes.OrderByLastEventTime,
+		Descending:   aws.Bool(true),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(streams.LogStreams) == 0 {
+		return []string{"(no log streams yet)"}, nil
+	}
+	events, err := store.cloudwatchlogs.GetLogEvents(ctx, &cloudwatchlogs.GetLogEventsInput{
+		LogGroupName:  &logGroup,
+		LogStreamName: streams.LogStreams[0].LogStreamName,
+		Limit:         aws.Int32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(events.Events))
+	for _, e := range events.Events {
+		out = append(out, fmt.Sprintf(logFmt, time.Unix(0, *e.Timestamp*int64(time.Millisecond)).Format(time.RFC3339), *e.Message))
+	}
+	return out, nil
+}
