@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
@@ -49,12 +50,49 @@ func (store *Store) DescribeTable(ctx context.Context, name string) (*ddbTypes.T
 // ScanFirstPage runs a Scan with the given limit and returns the first page
 // only. Pagination beyond page 1 is a follow-up.
 func (store *Store) ScanFirstPage(ctx context.Context, table string, limit int32) ([]map[string]ddbTypes.AttributeValue, error) {
+	return store.ScanIndexFirstPage(ctx, table, "", limit)
+}
+
+// ScanIndexFirstPage scans either the base table (indexName == "") or a GSI/LSI
+// (indexName non-empty) and returns the first page of items.
+func (store *Store) ScanIndexFirstPage(ctx context.Context, table, indexName string, limit int32) ([]map[string]ddbTypes.AttributeValue, error) {
 	store.initDynamoDBClient()
-	slog.Debug("api ScanFirstPage", "table", table, "limit", limit)
-	resp, err := store.dynamodb.Scan(ctx, &dynamodb.ScanInput{
+	slog.Debug("api ScanIndexFirstPage", "table", table, "index", indexName, "limit", limit)
+	in := &dynamodb.ScanInput{
 		TableName: &table,
 		Limit:     &limit,
-	})
+	}
+	if indexName != "" {
+		in.IndexName = &indexName
+	}
+	resp, err := store.dynamodb.Scan(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Items, nil
+}
+
+// QueryEquality runs a Query against the base table or an index using a single
+// equality condition on `keyAttr`. The value is treated as a string. Returns
+// the first page only.
+func (store *Store) QueryEquality(ctx context.Context, table, indexName, keyAttr, keyValue string, limit int32) ([]map[string]ddbTypes.AttributeValue, error) {
+	store.initDynamoDBClient()
+	slog.Debug("api QueryEquality", "table", table, "index", indexName, "attr", keyAttr, "limit", limit)
+	in := &dynamodb.QueryInput{
+		TableName:              &table,
+		Limit:                  &limit,
+		KeyConditionExpression: aws.String("#k = :v"),
+		ExpressionAttributeNames: map[string]string{
+			"#k": keyAttr,
+		},
+		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
+			":v": &ddbTypes.AttributeValueMemberS{Value: keyValue},
+		},
+	}
+	if indexName != "" {
+		in.IndexName = &indexName
+	}
+	resp, err := store.dynamodb.Query(ctx, in)
 	if err != nil {
 		return nil, err
 	}

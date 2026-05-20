@@ -139,3 +139,31 @@ func TestScanFirstPageRespectsLimit(t *testing.T) {
 		t.Fatalf("got %d items", len(items))
 	}
 }
+
+func TestScanIndexFirstPageDoesNotError(t *testing.T) {
+	store := newStoreWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+		return smithymiddleware.FinalizeOutput{Result: &dynamodb.ScanOutput{}}, smithymiddleware.Metadata{}, nil
+	})
+	if _, err := store.ScanIndexFirstPage(context.Background(), "users", "gsi-email", 5); err != nil {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestQueryEqualityPassesArgs(t *testing.T) {
+	store := newStoreWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+		return smithymiddleware.FinalizeOutput{
+			Result: &dynamodb.QueryOutput{
+				Items: []map[string]ddbTypes.AttributeValue{
+					{"email": &ddbTypes.AttributeValueMemberS{Value: "a@b"}},
+				},
+			},
+		}, smithymiddleware.Metadata{}, nil
+	})
+	got, err := store.QueryEquality(context.Background(), "users", "gsi-email", "email", "a@b", 5)
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d items", len(got))
+	}
+}
