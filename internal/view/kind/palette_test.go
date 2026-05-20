@@ -11,11 +11,19 @@ type fakeApp struct {
 	switched   Kind
 	switchedV  View
 	flashedMsg string
+	switchErr  error
 }
 
-func (f *fakeApp) APIStore() *api.Store                  { return nil }
-func (f *fakeApp) SwitchView(k Kind, v View) error    { f.switched = k; f.switchedV = v; return nil }
-func (f *fakeApp) FlashError(msg string)              { f.flashedMsg = msg }
+func (f *fakeApp) APIStore() *api.Store { return nil }
+func (f *fakeApp) SwitchView(k Kind, v View) error {
+	if f.switchErr != nil {
+		return f.switchErr
+	}
+	f.switched = k
+	f.switchedV = v
+	return nil
+}
+func (f *fakeApp) FlashError(msg string) { f.flashedMsg = msg }
 
 type buildableKind struct {
 	stubKind
@@ -78,5 +86,17 @@ func TestPaletteSubmitBuildErrorFlashes(t *testing.T) {
 	}
 	if app.flashedMsg != "boom" {
 		t.Fatalf("flashed = %q; want %q", app.flashedMsg, "boom")
+	}
+}
+
+func TestPaletteSubmitSwitchViewErrorFlashes(t *testing.T) {
+	resetRegistryForTest()
+	Register(&buildableKind{stubKind: stubKind{name: "lambda"}})
+	app := &fakeApp{switchErr: errors.New("kaboom")}
+
+	NewPalette(app).Submit("lambda")
+
+	if app.flashedMsg != "kaboom" {
+		t.Fatalf("flashed = %q; want %q", app.flashedMsg, "kaboom")
 	}
 }
