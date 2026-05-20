@@ -475,3 +475,14 @@ func (app *App) SwitchView(k kindpkg.Kind, v kindpkg.View) error {
 	app.Pages.AddAndSwitchToPage(pageName, v.Render(), true)
 	return nil
 }
+
+// Back removes the current front page if it is a kind page, causing tview to
+// re-show the previously visible page. Satisfies kind.App. Used by Esc on a
+// flat-kind view (see simpleKindView.OnKey).
+func (app *App) Back() {
+	name, _ := app.Pages.GetFrontPage()
+	if !strings.HasPrefix(name, "kind.") {
+		return
+	}
+	app.Pages.RemovePage(name)
+}

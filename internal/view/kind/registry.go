@@ -21,6 +21,9 @@ type App interface {
 	APIStore() *api.Store
 	SwitchView(k Kind, v View) error
 	FlashError(msg string)
+	// Back removes the current front kind page (if any) so the previously
+	// visible page is re-shown. Used by Esc on a flat-kind view.
+	Back()
 }
 
 // View is what a Kind's Build returns. Intentionally minimal so flat kinds

@@ -77,7 +77,7 @@ func (k *lambdaKind) invokeAction() kindpkg.Action {
 		tv := tview.NewTextView().SetText(body)
 		tv.SetBorder(true).SetTitle(" invoke result ")
 		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-		return app.SwitchView(&logsPseudoKind{name: "invoke:" + aws.ToString(k.selected.FunctionName)}, &simpleKindView{flex: flex, focus: tv})
+		return app.SwitchView(&logsPseudoKind{name: "invoke:" + aws.ToString(k.selected.FunctionName)}, &simpleKindView{flex: flex, app: app})
 	}
 }
 
@@ -105,7 +105,7 @@ func (k *lambdaKind) configAction() kindpkg.Action {
 		tv := tview.NewTextView().SetText(body)
 		tv.SetBorder(true).SetTitle(" " + aws.ToString(k.selected.FunctionName) + " config ")
 		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-		return app.SwitchView(&logsPseudoKind{name: "config:" + aws.ToString(k.selected.FunctionName)}, &simpleKindView{flex: flex, focus: tv})
+		return app.SwitchView(&logsPseudoKind{name: "config:" + aws.ToString(k.selected.FunctionName)}, &simpleKindView{flex: flex, app: app})
 	}
 }
 
@@ -115,7 +115,7 @@ func (k *lambdaKind) Build(app kindpkg.App) (kindpkg.View, error) {
 		return nil, err
 	}
 
-	table := tview.NewTable().SetBorders(false).SetSelectable(true, false)
+	table := tview.NewTable().SetBorders(false)
 	headers := []string{"Name", "Runtime", "Memory", "Timeout", "LastModified", "State"}
 	for col, h := range headers {
 		table.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false).SetTextColor(tcell.ColorYellow))
@@ -133,21 +133,13 @@ func (k *lambdaKind) Build(app kindpkg.App) (kindpkg.View, error) {
 		for col, c := range cells {
 			cell := tview.NewTableCell(c)
 			if col == 0 {
-				cell.SetReference(&copyFn) // picked up by tableSelectionForActiveKind
+				cell.SetReference(&copyFn) // stored on column 0 reference; SelectionChangedFunc reads it
 			}
 			table.SetCell(row+1, col, cell)
 		}
 	}
 
-	flex := tview.NewFlex().AddItem(table, 0, 1, true)
-	view := &simpleKindView{flex: flex, focus: table, app: app, source: k}
-	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if view.OnKey(event) {
-			return nil
-		}
-		return event
-	})
-	return view, nil
+	return newTableKindView(app, k, table), nil
 }
 
 // openLogGroupTail opens a read-only log-tail view for the given CloudWatch
@@ -163,7 +155,7 @@ func openLogGroupTail(app kindpkg.App, logGroup string) error {
 	tv := tview.NewTextView().SetDynamicColors(true).SetText(joinLines(logs))
 	tv.SetBorder(true).SetTitle(" " + logGroup + " ")
 	flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-	return app.SwitchView(&logsPseudoKind{name: logGroup}, &simpleKindView{flex: flex, focus: tv})
+	return app.SwitchView(&logsPseudoKind{name: logGroup}, &simpleKindView{flex: flex, app: app})
 }
 
 func joinLines(in []string) string {
