@@ -5,6 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
 )
 
 func TestLambdaKindName(t *testing.T) {
@@ -40,6 +41,16 @@ func TestLambdaKindBreadcrumb(t *testing.T) {
 	k.SetSelection(&lambdaTypes.FunctionConfiguration{FunctionName: aws.String("auth-handler")})
 	if got := k.Breadcrumb(); got != "lambda > auth-handler" {
 		t.Fatalf("Breadcrumb = %q; want %q", got, "lambda > auth-handler")
+	}
+}
+
+func TestLambdaKindRegistered(t *testing.T) {
+	k, ok := kindpkg.Get("lambda")
+	if !ok {
+		t.Fatal("lambda kind not registered")
+	}
+	if _, ok := k.(*lambdaKind); !ok {
+		t.Fatalf("registered kind is %T; want *lambdaKind", k)
 	}
 }
 
