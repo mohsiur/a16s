@@ -467,6 +467,7 @@ func (app *App) FlashError(msg string) {
 // pages stack themselves; in that case we only record the active kind.
 func (app *App) SwitchView(k kindpkg.Kind, v kindpkg.View) error {
 	app.activeKind = k
+	slog.Debug("kind switch", "kind", k.Name())
 	if _, isNoop := v.(*noopView); isNoop {
 		return nil
 	}
