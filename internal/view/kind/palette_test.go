@@ -12,6 +12,7 @@ type fakeApp struct {
 	switchedV  View
 	flashedMsg string
 	switchErr  error
+	backCalls  int
 }
 
 func (f *fakeApp) APIStore() *api.Store { return nil }
@@ -24,6 +25,7 @@ func (f *fakeApp) SwitchView(k Kind, v View) error {
 	return nil
 }
 func (f *fakeApp) FlashError(msg string) { f.flashedMsg = msg }
+func (f *fakeApp) Back()                 { f.backCalls++ }
 
 type buildableKind struct {
 	stubKind
