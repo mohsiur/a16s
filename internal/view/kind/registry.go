@@ -45,6 +45,9 @@ type Binding struct {
 type Kind interface {
 	Name() string
 
+	// Build constructs the kind's view. May be called multiple times across
+	// a session (every `:` invocation rebuilds). Implementations should be
+	// cheap to call or cache internally.
 	Build(app App) (View, error)
 	Reset()
 
