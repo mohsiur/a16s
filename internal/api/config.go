@@ -39,6 +39,10 @@ func (store *Store) SwitchAwsConfig(profile string, region string) error {
 	store.account = nil
 
 	slog.Info("switched AWS profile", slog.String("AWS_PROFILE", profile), slog.String("AWS_REGION", region))
+
+	if OnConfigSwitch != nil {
+		OnConfigSwitch()
+	}
 	return nil
 }
 
