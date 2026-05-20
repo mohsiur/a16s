@@ -1,13 +1,18 @@
 package view
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	sqsTypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/gdamore/tcell/v2"
+	"github.com/mohsiur/a16s/internal/utils"
 	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 	"github.com/rivo/tview"
 	"golang.org/x/sync/errgroup"
@@ -92,25 +97,97 @@ func (k *sqsKind) PrimaryAction() kindpkg.Action {
 			app.FlashError(err.Error())
 			return err
 		}
-		var body strings.Builder
-		if len(msgs) == 0 {
-			body.WriteString("(no messages)")
-		}
-		for _, m := range msgs {
-			body.WriteString("---\n")
-			if m.Body != nil {
-				body.WriteString(*m.Body)
-			}
-			body.WriteString("\n")
-		}
-		tv := tview.NewTextView().SetText(body.String())
-		tv.SetBorder(true).SetTitle(" peek " + queueNameFromURL(k.selectedURL) + " ")
-		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-		return app.SwitchView(
-			&pseudoKind{name: "peek:" + queueNameFromURL(k.selectedURL)},
-			newTextSubView(app, flex),
-		)
+		queueName := queueNameFromURL(k.selectedURL)
+		view := buildPeekTableView(app, queueName, msgs)
+		return app.SwitchView(&pseudoKind{name: "peek:" + queueName}, view)
 	}
+}
+
+// buildPeekTableView renders peeked SQS messages as a sortable column table.
+// Empty queues fall back to a TextView so the user gets a clear "(no
+// messages)" instead of a header-only table. Enter on a row opens a sub-view
+// with the full body, JSON-pretty-printed when parseable.
+func buildPeekTableView(app kindpkg.App, queueName string, msgs []sqsTypes.Message) *simpleKindView {
+	if len(msgs) == 0 {
+		tv := tview.NewTextView().SetText("(no messages)")
+		tv.SetBorder(true).SetTitle(" peek " + queueName + " ")
+		return newTextSubView(app, tview.NewFlex().AddItem(tv, 0, 1, true))
+	}
+
+	table := tview.NewTable().SetBorders(false)
+	headers := []string{"MessageId", "Sent", "Size", "Body"}
+	for col, h := range headers {
+		table.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false).SetTextColor(tcell.ColorYellow))
+	}
+	for r, m := range msgs {
+		body := ""
+		if m.Body != nil {
+			body = *m.Body
+		}
+		preview := body
+		if len(preview) > 80 {
+			preview = strings.ReplaceAll(preview[:80], "\n", " ") + "…"
+		} else {
+			preview = strings.ReplaceAll(preview, "\n", " ")
+		}
+		id := ""
+		if m.MessageId != nil {
+			id = *m.MessageId
+		}
+		cells := []string{
+			id,
+			peekSentAge(m.Attributes),
+			fmt.Sprintf("%d", len(body)),
+			preview,
+		}
+		for col, c := range cells {
+			cell := tview.NewTableCell(c).SetMaxWidth(80)
+			if col == 0 {
+				// Capture body on the first cell so onEnter can resolve it
+				// without re-walking the message slice.
+				cell.SetReference(body)
+			}
+			table.SetCell(r+1, col, cell)
+		}
+	}
+
+	title := fmt.Sprintf("peek %s (%d)", queueName, len(msgs))
+	return newTableSubView(app, table, title, func(row int) {
+		ref, _ := table.GetCell(row, 0).GetReference().(string)
+		showPeekBody(app, queueName, ref)
+	})
+}
+
+// peekSentAge converts SentTimestamp (epoch milliseconds, set by SQS for
+// every message) into a relative age string. Falls back to "" when the
+// attribute is missing or unparsable so sort still groups them together.
+func peekSentAge(attrs map[string]string) string {
+	raw, ok := attrs["SentTimestamp"]
+	if !ok {
+		return ""
+	}
+	ms, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return ""
+	}
+	t := time.UnixMilli(ms)
+	return utils.Age(&t)
+}
+
+// showPeekBody opens a TextView with the full message body, pretty-printed
+// when the body parses as JSON. Esc returns to the peek table.
+func showPeekBody(app kindpkg.App, queueName, body string) {
+	display := body
+	var pretty bytes.Buffer
+	if json.Indent(&pretty, []byte(body), "", "  ") == nil && pretty.Len() > 0 {
+		display = pretty.String()
+	}
+	tv := tview.NewTextView().SetText(display)
+	tv.SetBorder(true).SetTitle(" peek " + queueName + " body ")
+	_ = app.SwitchView(
+		&pseudoKind{name: "peek-body:" + queueName},
+		newTextSubView(app, tview.NewFlex().AddItem(tv, 0, 1, true)),
+	)
 }
 
 func (k *sqsKind) SecondaryActions() []kindpkg.Binding {

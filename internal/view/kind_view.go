@@ -1,6 +1,7 @@
 package view
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -73,6 +74,52 @@ func newTextSubView(app kindpkg.App, body tview.Primitive) *simpleKindView {
 	return view
 }
 
+// newTableSubView wraps an already-populated tview.Table in a simpleKindView
+// for sub-views that should support sort + filter (peek, scan results) but
+// have no host Kind. `onEnter` fires when the user presses Enter on a row.
+// The view captures originalCells immediately so F1..F12 sorting works on
+// the very first keypress without requiring a prior `/` filter.
+func newTableSubView(app kindpkg.App, table *tview.Table, title string, onEnter func(row int)) *simpleKindView {
+	table.SetSelectable(true, false)
+	table.SetFixed(1, 0)
+	table.SetBorder(true)
+	if title != "" {
+		table.SetTitle(" " + title + " ")
+	}
+
+	flex := tview.NewFlex().SetDirection(tview.FlexRow).AddItem(table, 0, 1, true)
+	view := &simpleKindView{flex: flex, app: app, table: table}
+
+	rows := table.GetRowCount()
+	cols := table.GetColumnCount()
+	cells := make([][]*tview.TableCell, rows)
+	for r := 0; r < rows; r++ {
+		row := make([]*tview.TableCell, cols)
+		for c := 0; c < cols; c++ {
+			row[c] = table.GetCell(r, c)
+		}
+		cells[r] = row
+	}
+	view.originalCells = cells
+
+	if onEnter != nil {
+		table.SetSelectedFunc(func(row, _ int) {
+			if row > 0 {
+				onEnter(row)
+			}
+		})
+	}
+	capture := func(event *tcell.EventKey) *tcell.EventKey {
+		if view.OnKey(event) {
+			return nil
+		}
+		return event
+	}
+	table.SetInputCapture(capture)
+	flex.SetInputCapture(capture)
+	return view
+}
+
 // pseudoKind is a transient, non-registered kind used as the "host" of an
 // auxiliary screen launched by an action (log tail, invoke result, config
 // dump, etc). It implements kind.Kind with no-op behaviour so the page can
@@ -95,6 +142,10 @@ func (p *pseudoKind) SecondaryActions() []kindpkg.Binding     { return nil }
 // cells once at filter-show time (rebuilds on every populateTableKindView)
 // so backspace can restore rows. Enter dismisses the input but keeps the
 // filter applied; Esc clears + dismisses.
+//
+// Sort state: F1..F12 sort by the matching column (F1 = col 0). originalCells
+// is also the sort source-of-truth; pressing the same key twice flips the
+// order. Sort and filter are independent — sorting clears the active filter.
 type simpleKindView struct {
 	flex   *tview.Flex
 	app    kindpkg.App
@@ -104,6 +155,9 @@ type simpleKindView struct {
 	filterInput   *tview.InputField
 	filterActive  bool
 	originalCells [][]*tview.TableCell
+
+	sortColumn int
+	sortOrder  string
 }
 
 func (s *simpleKindView) Render() *tview.Flex { return s.flex }
@@ -114,6 +168,11 @@ func (s *simpleKindView) OnKey(event *tcell.EventKey) (handled bool) {
 			s.app.Back()
 			return true
 		}
+	}
+	if event.Key() >= tcell.KeyF1 && event.Key() <= tcell.KeyF12 && s.table != nil {
+		col := int(event.Key() - tcell.KeyF1)
+		s.sortByColumn(col)
+		return true
 	}
 	if s.source == nil {
 		return false
@@ -135,6 +194,66 @@ func (s *simpleKindView) OnKey(event *tcell.EventKey) (handled bool) {
 		}
 	}
 	return false
+}
+
+// sortByColumn re-renders the table sorted by the given column index. Reuses
+// CompareCellValues from table_sort.go so behavior matches the legacy ECS view
+// (numeric, age, date, and string detection). Same column twice flips order.
+func (s *simpleKindView) sortByColumn(col int) {
+	if s.table == nil {
+		return
+	}
+	if s.originalCells == nil {
+		s.snapshotCells()
+	}
+	if len(s.originalCells) == 0 {
+		return
+	}
+	header := s.originalCells[0]
+	if col < 0 || col >= len(header) {
+		return
+	}
+	if s.sortColumn == col && s.sortOrder == "desc" {
+		s.sortOrder = "asc"
+	} else {
+		s.sortColumn = col
+		s.sortOrder = "desc"
+	}
+	headerText := ""
+	if header[col] != nil {
+		headerText = header[col].Text
+	}
+
+	rows := make([][]*tview.TableCell, len(s.originalCells)-1)
+	copy(rows, s.originalCells[1:])
+	sort.SliceStable(rows, func(i, j int) bool {
+		a := ""
+		b := ""
+		if rows[i][col] != nil {
+			a = rows[i][col].Text
+		}
+		if rows[j][col] != nil {
+			b = rows[j][col].Text
+		}
+		return CompareCellValues(a, b, headerText, false, s.sortOrder)
+	})
+
+	s.table.Clear()
+	for c, cell := range header {
+		if cell != nil {
+			s.table.SetCell(0, c, cell)
+		}
+	}
+	for r, row := range rows {
+		for c, cell := range row {
+			if cell != nil {
+				s.table.SetCell(r+1, c, cell)
+			}
+		}
+	}
+	if len(rows) > 0 {
+		s.table.Select(1, 0)
+	}
 }
 
 // showFilter mounts a one-line InputField at the top of the view and

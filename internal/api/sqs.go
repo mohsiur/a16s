@@ -33,14 +33,17 @@ func (store *Store) GetQueueAttributes(ctx context.Context, queueURL string) (ma
 }
 
 // PeekMessages reads up to 10 messages with VisibilityTimeout=0 so real
-// consumers are not affected.
+// consumers are not affected. MessageSystemAttributeNameAll asks SQS to
+// include the SentTimestamp/SenderId/etc attributes — without it the peek
+// table can't render the "Sent" age column.
 func (store *Store) PeekMessages(ctx context.Context, queueURL string) ([]sqsTypes.Message, error) {
 	store.initSqsClient()
 	out, err := store.sqs.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
-		QueueUrl:            &queueURL,
-		MaxNumberOfMessages: 10,
-		VisibilityTimeout:   0,
-		WaitTimeSeconds:     0,
+		QueueUrl:                    &queueURL,
+		MaxNumberOfMessages:         10,
+		VisibilityTimeout:           0,
+		WaitTimeSeconds:             0,
+		MessageSystemAttributeNames: []sqsTypes.MessageSystemAttributeName{sqsTypes.MessageSystemAttributeNameAll},
 	})
 	if err != nil {
 		return nil, err
