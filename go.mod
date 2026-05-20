@@ -13,6 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.49.0
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.74.0
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.90.1
+	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.27
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.3
 	github.com/aws/smithy-go v1.25.1
 	github.com/gdamore/tcell/v2 v2.7.4

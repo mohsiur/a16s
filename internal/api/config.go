@@ -38,6 +38,7 @@ func (store *Store) SwitchAwsConfig(profile string, region string) error {
 	store.autoScaling = nil    // Will be lazy-loaded with new config
 	store.account = nil
 	store.lambda = nil
+	store.sqs = nil
 
 	slog.Info("switched AWS profile", slog.String("AWS_PROFILE", profile), slog.String("AWS_REGION", region))
 
