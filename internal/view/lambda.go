@@ -1,9 +1,14 @@
 package view
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	"github.com/gdamore/tcell/v2"
 	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
+	"github.com/rivo/tview"
 )
 
 func init() { kindpkg.Register(&lambdaKind{}) }
@@ -47,5 +52,35 @@ func (k *lambdaKind) SecondaryActions() []kindpkg.Binding {
 }
 
 func (k *lambdaKind) Build(app kindpkg.App) (kindpkg.View, error) {
-	return nil, nil // implemented in next task
+	fns, err := app.APIStore().ListFunctions(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	table := tview.NewTable().SetBorders(false).SetSelectable(true, false)
+	headers := []string{"Name", "Runtime", "Memory", "Timeout", "LastModified", "State"}
+	for col, h := range headers {
+		table.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false).SetTextColor(tcell.ColorYellow))
+	}
+	for row, fn := range fns {
+		copyFn := fn
+		cells := []string{
+			aws.ToString(fn.FunctionName),
+			string(fn.Runtime),
+			fmt.Sprintf("%d", aws.ToInt32(fn.MemorySize)),
+			fmt.Sprintf("%ds", aws.ToInt32(fn.Timeout)),
+			aws.ToString(fn.LastModified),
+			string(fn.State),
+		}
+		for col, c := range cells {
+			cell := tview.NewTableCell(c)
+			if col == 0 {
+				cell.SetReference(&copyFn) // picked up by tableSelectionForActiveKind
+			}
+			table.SetCell(row+1, col, cell)
+		}
+	}
+
+	flex := tview.NewFlex().AddItem(table, 0, 1, true)
+	return &simpleKindView{flex: flex, focus: table}, nil
 }
