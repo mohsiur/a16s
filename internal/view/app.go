@@ -178,6 +178,13 @@ func Start(option Option) error {
 
 	api.OnConfigSwitch = kindpkg.ResetAll
 
+	app.Pages.SetChangedFunc(func() {
+		name, _ := app.Pages.GetFrontPage()
+		if !strings.HasPrefix(name, "kind.") {
+			app.activeKind = nil
+		}
+	})
+
 	app.SetInputCapture(app.globalInputHandle)
 
 	if option.Splash {
