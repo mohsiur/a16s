@@ -62,3 +62,11 @@ func (store *Store) PurgeQueue(ctx context.Context, queueURL string) error {
 	_, err := store.sqs.PurgeQueue(ctx, &sqs.PurgeQueueInput{QueueUrl: &queueURL})
 	return err
 }
+
+// StoreWithSqsForTest constructs a Store with a pre-configured SQS client.
+// Used by tests in any package that need to mock SQS at the SDK middleware
+// layer; the Store.sqs field is unexported so this is the only safe entry
+// point.
+func StoreWithSqsForTest(cfg *aws.Config, c *sqs.Client) *Store {
+	return &Store{Config: cfg, sqs: c}
+}
