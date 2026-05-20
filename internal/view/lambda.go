@@ -2,7 +2,9 @@ package view
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
@@ -74,8 +76,12 @@ func (k *lambdaKind) invokeAction() kindpkg.Action {
 			return err
 		}
 		body := string(out.Payload)
+		title := " invoke result "
+		if out.FunctionError != nil {
+			title = " invoke result (error) "
+		}
 		tv := tview.NewTextView().SetText(body)
-		tv.SetBorder(true).SetTitle(" invoke result ")
+		tv.SetBorder(true).SetTitle(title)
 		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
 		return app.SwitchView(&pseudoKind{name: "invoke:" + aws.ToString(k.selected.FunctionName)}, &simpleKindView{flex: flex, app: app})
 	}
@@ -100,8 +106,15 @@ func (k *lambdaKind) configAction() kindpkg.Action {
 			app.FlashError(err.Error())
 			return err
 		}
-		// Render the full config as JSON for now (reuse json.go in a later pass).
-		body := fmt.Sprintf("%+v", out.Configuration)
+		// Render the full config as JSON; fall back to %+v if marshalling fails
+		// (e.g. an unexpected non-marshalable field).
+		var body string
+		if data, mErr := json.MarshalIndent(out.Configuration, "", "  "); mErr == nil {
+			body = string(data)
+		} else {
+			app.FlashError("config marshal failed: " + mErr.Error())
+			body = fmt.Sprintf("%+v", out.Configuration)
+		}
 		tv := tview.NewTextView().SetText(body)
 		tv.SetBorder(true).SetTitle(" " + aws.ToString(k.selected.FunctionName) + " config ")
 		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
@@ -152,7 +165,9 @@ func openLogGroupTail(app kindpkg.App, logGroup string) error {
 		app.FlashError(err.Error())
 		return err
 	}
-	tv := tview.NewTextView().SetDynamicColors(true).SetText(joinLines(logs))
+	// Each log line already has a trailing \n via api.logFmt, so strings.Join
+	// with an empty separator is the right concatenation.
+	tv := tview.NewTextView().SetDynamicColors(true).SetText(strings.Join(logs, ""))
 	tv.SetBorder(true).SetTitle(" " + logGroup + " ")
 	flex := tview.NewFlex().AddItem(tv, 0, 1, true)
 	return app.SwitchView(&pseudoKind{name: "logs:" + logGroup}, &simpleKindView{flex: flex, app: app})
