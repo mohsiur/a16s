@@ -1,4 +1,4 @@
-module github.com/keidarcy/e1s
+module github.com/mohsiur/a16s
 
 go 1.26
 

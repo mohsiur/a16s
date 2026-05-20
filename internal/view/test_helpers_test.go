@@ -1,8 +1,8 @@
 package view
 
 import (
-	"github.com/keidarcy/e1s/internal/api"
-	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
+	"github.com/mohsiur/a16s/internal/api"
+	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 	"github.com/rivo/tview"
 )
 

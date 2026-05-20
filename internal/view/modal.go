@@ -9,8 +9,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
-	"github.com/keidarcy/e1s/internal/ui"
-	"github.com/keidarcy/e1s/internal/utils"
+	"github.com/mohsiur/a16s/internal/ui"
+	"github.com/mohsiur/a16s/internal/utils"
 	"github.com/rivo/tview"
 )
 

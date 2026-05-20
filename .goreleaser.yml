@@ -4,8 +4,8 @@ before:
   hooks:
     - go mod download
 builds:
-  - binary: e1s
-    dir: cmd/e1s
+  - binary: a16s
+    dir: cmd/a16s
     goos:
       - linux
       - windows
@@ -35,11 +35,11 @@ universal_binaries:
   - replace: true
 
 brews:
-  - name: e1s
-    homepage: https://github.com/keidarcy/e1s
-    description: e1s is a terminal application to simply browsing and manage AWS ECS resources, with a focus on Fargate. Inspired by k9s.
+  - name: a16s
+    homepage: https://github.com/mohsiur/a16s
+    description: a16s is a terminal application to browse and manage AWS resources (ECS, Lambda, SQS, DynamoDB), inspired by k9s.
     repository:
-      owner: keidarcy
+      owner: mohsiur
       name: homebrew-tap
 
 checksum:

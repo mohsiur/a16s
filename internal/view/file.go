@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/keidarcy/e1s/internal/ui"
+	"github.com/mohsiur/a16s/internal/ui"
 	"github.com/rivo/tview"
 )
 
@@ -191,7 +191,7 @@ func (v *view) cpForm() (*tview.Form, *string) {
 		path := f.GetFormItemByLabel(pathLabel).(*tview.InputField).GetText()
 		remotePath := f.GetFormItemByLabel(remotePathLabel).(*tview.InputField).GetText()
 		delete := f.GetFormItemByLabel(deleteLabel).(*tview.Checkbox).IsChecked()
-		baseDir := "e1s"
+		baseDir := "a16s"
 
 		isDir := false
 		dirname := ""

@@ -1,7 +1,7 @@
-// Package kind provides a registry for AWS resource kinds rendered in the e1s
-// TUI. Each Kind is registered once at init() time and dispatched via the `:`
-// palette. The package is the single source of truth for how flat (non-
-// hierarchical) services slot into the app — see
+// Package kind provides a registry for AWS resource kinds rendered in the
+// a16s TUI. Each Kind is registered once at init() time and dispatched via
+// the `:` palette. The package is the single source of truth for how flat
+// (non-hierarchical) services slot into the app — see
 // docs/superpowers/specs/2026-05-20-multi-service-fork-design.md.
 package kind
 
@@ -9,7 +9,7 @@ import (
 	"sort"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/keidarcy/e1s/internal/api"
+	"github.com/mohsiur/a16s/internal/api"
 	"github.com/rivo/tview"
 )
 

@@ -53,7 +53,7 @@ func (store *Store) StartSession(input *SsmStartSessionInput, profile string, re
 		Target:       aws.String(target),
 		DocumentName: aws.String(documentName),
 		Parameters:   params,
-		Reason:       aws.String("session started via e1s"),
+		Reason:       aws.String("session started via a16s"),
 	}
 
 	result, err := store.ssm.StartSession(context.Background(), startInput)

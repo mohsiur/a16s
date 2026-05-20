@@ -12,11 +12,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/gdamore/tcell/v2"
-	"github.com/keidarcy/e1s/internal/api"
-	"github.com/keidarcy/e1s/internal/color"
-	"github.com/keidarcy/e1s/internal/ui"
-	"github.com/keidarcy/e1s/internal/utils"
-	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
+	"github.com/mohsiur/a16s/internal/api"
+	"github.com/mohsiur/a16s/internal/color"
+	"github.com/mohsiur/a16s/internal/ui"
+	"github.com/mohsiur/a16s/internal/utils"
+	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 	"github.com/rivo/tview"
 )
 
@@ -146,12 +146,12 @@ func newApp(option Option) (*App, error) {
 		taskStatus:    types.DesiredStatusRunning,
 		Entity: Entity{
 			cluster: &types.Cluster{
-				ClusterName: aws.String("e1s_default_cluster"),
-				ClusterArn:  aws.String("e1s_default_cluster_arn"),
+				ClusterName: aws.String("a16s_default_cluster"),
+				ClusterArn:  aws.String("a16s_default_cluster_arn"),
 			},
 			service: &types.Service{
-				ServiceName: aws.String("e1s_default_service"),
-				ServiceArn:  aws.String("e1s_default_service arn"),
+				ServiceName: aws.String("a16s_default_service"),
+				ServiceArn:  aws.String("a16s_default_service arn"),
 			},
 			task:           &types.Task{},
 			container:      &types.Container{},
@@ -166,9 +166,9 @@ func Start(option Option) error {
 	defer file.Close()
 	slog.Debug(`
 ****************************************************************
-**************** Started e1s
+**************** Started a16s
 ****************************************************************`)
-	slog.Debug("e1s start", "option", option)
+	slog.Debug("a16s start", "option", option)
 	theme = color.InitStyles(option.Theme)
 
 	app, err := newApp(option)
@@ -380,7 +380,7 @@ func (app *App) showPrimaryKindPage(k kind, reload bool) error {
 	return nil
 }
 
-// E1s app close hook
+// app close hook
 func (app *App) onClose() {
 	if len(app.sessions) != 0 {
 		ids := []*string{}
@@ -396,7 +396,7 @@ func (app *App) onClose() {
 	}
 
 	slog.Debug(`
-**************** Exited e1s ************************************`)
+**************** Exited a16s ************************************`)
 }
 
 func (app *App) globalInputHandle(event *tcell.EventKey) *tcell.EventKey {

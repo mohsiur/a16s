@@ -3,8 +3,8 @@ package view
 import (
 	"fmt"
 
-	"github.com/keidarcy/e1s/internal/color"
-	"github.com/keidarcy/e1s/internal/utils"
+	"github.com/mohsiur/a16s/internal/color"
+	"github.com/mohsiur/a16s/internal/utils"
 	"github.com/rivo/tview"
 )
 
@@ -82,7 +82,7 @@ func (v *view) addFooterItems() {
 	awsInfoView := tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterAwsFmt, awsInfo))
 	v.footer.footerFlex.AddItem(awsInfoView, len(awsInfo)+3, 0, false)
 
-	// e1s info label
-	t := tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterE1sFmt, utils.AppName, utils.AppVersion))
+	// app info label
+	t := tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterAppFmt, utils.AppName, utils.AppVersion))
 	v.footer.footerFlex.AddItem(t, len(utils.AppVersion)+7, 0, false)
 }

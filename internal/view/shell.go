@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/keidarcy/e1s/internal/ui"
-	"github.com/keidarcy/e1s/internal/utils"
+	"github.com/mohsiur/a16s/internal/ui"
+	"github.com/mohsiur/a16s/internal/utils"
 	"github.com/rivo/tview"
 )
 
@@ -110,7 +110,7 @@ func (v *view) preValidateExec() (*[]string, string, error) {
 	}
 
 	if v.app.ReadOnly {
-		return nil, "", fmt.Errorf("no ecs exec permission in read only e1s mode")
+		return nil, "", fmt.Errorf("no ecs exec permission in read only a16s mode")
 	}
 
 	_, err := exec.LookPath(awsCli)

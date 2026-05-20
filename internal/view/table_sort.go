@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/keidarcy/e1s/internal/utils"
+	"github.com/mohsiur/a16s/internal/utils"
 )
 
 // Handle sort by column event
