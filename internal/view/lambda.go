@@ -87,11 +87,47 @@ func (k *lambdaKind) invokeAction() kindpkg.Action {
 	}
 }
 
+// parseQueueNameFromArn returns the queue name from an SQS ARN like
+// "arn:aws:sqs:us-east-1:111:my-dlq". Returns "" for non-SQS ARNs or
+// malformed input.
+func parseQueueNameFromArn(arn string) string {
+	if !strings.HasPrefix(arn, "arn:aws:sqs:") {
+		return ""
+	}
+	idx := strings.LastIndex(arn, ":")
+	if idx < 0 || idx == len(arn)-1 {
+		return ""
+	}
+	return arn[idx+1:]
+}
+
 func (k *lambdaKind) dlqAction() kindpkg.Action {
 	return func(app kindpkg.App) error {
-		// Filled in during Phase 6. For now: flash.
-		app.FlashError("DLQ jump not implemented yet")
-		return nil
+		if k.selected == nil {
+			app.FlashError("no function selected")
+			return nil
+		}
+		if k.selected.DeadLetterConfig == nil || k.selected.DeadLetterConfig.TargetArn == nil {
+			app.FlashError("no DLQ configured")
+			return nil
+		}
+		queueName := parseQueueNameFromArn(aws.ToString(k.selected.DeadLetterConfig.TargetArn))
+		if queueName == "" {
+			app.FlashError("could not parse DLQ ARN")
+			return nil
+		}
+		sqsK, ok := kindpkg.Get("sqs")
+		if !ok {
+			app.FlashError("sqs kind not registered")
+			return nil
+		}
+		sqsK.SetSelection(queueName)
+		v, err := sqsK.Build(app)
+		if err != nil {
+			app.FlashError(err.Error())
+			return err
+		}
+		return app.SwitchView(sqsK, v)
 	}
 }
 
