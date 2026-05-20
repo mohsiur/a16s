@@ -77,7 +77,7 @@ func (k *lambdaKind) invokeAction() kindpkg.Action {
 		tv := tview.NewTextView().SetText(body)
 		tv.SetBorder(true).SetTitle(" invoke result ")
 		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-		return app.SwitchView(&logsPseudoKind{name: "invoke:" + aws.ToString(k.selected.FunctionName)}, &simpleKindView{flex: flex, app: app})
+		return app.SwitchView(&pseudoKind{name: "invoke:" + aws.ToString(k.selected.FunctionName)}, &simpleKindView{flex: flex, app: app})
 	}
 }
 
@@ -105,7 +105,7 @@ func (k *lambdaKind) configAction() kindpkg.Action {
 		tv := tview.NewTextView().SetText(body)
 		tv.SetBorder(true).SetTitle(" " + aws.ToString(k.selected.FunctionName) + " config ")
 		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-		return app.SwitchView(&logsPseudoKind{name: "config:" + aws.ToString(k.selected.FunctionName)}, &simpleKindView{flex: flex, app: app})
+		return app.SwitchView(&pseudoKind{name: "config:" + aws.ToString(k.selected.FunctionName)}, &simpleKindView{flex: flex, app: app})
 	}
 }
 
@@ -155,25 +155,5 @@ func openLogGroupTail(app kindpkg.App, logGroup string) error {
 	tv := tview.NewTextView().SetDynamicColors(true).SetText(joinLines(logs))
 	tv.SetBorder(true).SetTitle(" " + logGroup + " ")
 	flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-	return app.SwitchView(&logsPseudoKind{name: logGroup}, &simpleKindView{flex: flex, app: app})
+	return app.SwitchView(&pseudoKind{name: "logs:" + logGroup}, &simpleKindView{flex: flex, app: app})
 }
-
-func joinLines(in []string) string {
-	out := ""
-	for _, s := range in {
-		out += s + "\n"
-	}
-	return out
-}
-
-// logsPseudoKind is a transient kind for the log-tail screen. Not registered.
-type logsPseudoKind struct{ name string }
-
-func (l *logsPseudoKind) Name() string                            { return "logs:" + l.name }
-func (l *logsPseudoKind) Build(kindpkg.App) (kindpkg.View, error) { return nil, nil }
-func (l *logsPseudoKind) Reset()                                  {}
-func (l *logsPseudoKind) Selection() any                          { return nil }
-func (l *logsPseudoKind) SetSelection(any)                        {}
-func (l *logsPseudoKind) Breadcrumb() string                      { return l.name }
-func (l *logsPseudoKind) PrimaryAction() kindpkg.Action           { return nil }
-func (l *logsPseudoKind) SecondaryActions() []kindpkg.Binding     { return nil }
