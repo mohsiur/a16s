@@ -3,18 +3,18 @@ package kind
 import "testing"
 
 type stubKind struct {
-	name      string
+	name       string
 	resetCalls int
 }
 
-func (s *stubKind) Name() string                   { return s.name }
-func (s *stubKind) Build(App) (View, error)        { return nil, nil }
-func (s *stubKind) Reset()                         { s.resetCalls++ }
-func (s *stubKind) Selection() any                 { return nil }
-func (s *stubKind) SetSelection(any)               {}
-func (s *stubKind) Breadcrumb() string             { return s.name }
-func (s *stubKind) PrimaryAction() Action          { return nil }
-func (s *stubKind) SecondaryActions() []Binding    { return nil }
+func (s *stubKind) Name() string                { return s.name }
+func (s *stubKind) Build(App) (View, error)     { return nil, nil }
+func (s *stubKind) Reset()                      { s.resetCalls++ }
+func (s *stubKind) Selection() any              { return nil }
+func (s *stubKind) SetSelection(any)            {}
+func (s *stubKind) Breadcrumb() string          { return s.name }
+func (s *stubKind) PrimaryAction() Action       { return nil }
+func (s *stubKind) SecondaryActions() []Binding { return nil }
 
 func TestRegisterAndGet(t *testing.T) {
 	resetRegistryForTest()
