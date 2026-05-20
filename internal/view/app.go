@@ -316,7 +316,7 @@ func (app *App) start() error {
 		go func() {
 			for {
 				<-ticker.C
-				if app.secondaryKind == EmptyKind && !app.isSuspended {
+				if app.secondaryKind == EmptyKind && !app.isSuspended && app.activeKind == nil {
 					// tview is not thread-safe: UI updates must run on the main loop
 					app.QueueUpdateDraw(func() {
 						if err := app.showPrimaryKindPage(app.kind, true); err != nil {

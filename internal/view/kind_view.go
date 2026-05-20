@@ -64,6 +64,9 @@ func (s *simpleKindView) OnKey(event *tcell.EventKey) (handled bool) {
 //     the user's cursor without going through the legacy ECS view struct)
 //   - SetInputCapture that delegates to the simpleKindView's OnKey, which in
 //     turn calls the kind's PrimaryAction / SecondaryActions / Esc -> Back.
+//   - if the source implements kindpkg.Informer, an info pane above the
+//     table with two columns (aggregate stats + selection detail), refreshed
+//     on selection change.
 //
 // This is the single place flat kinds get their selection + key wiring; SQS
 // and DynamoDB phases pick it up for free.
@@ -71,8 +74,24 @@ func newTableKindView(app kindpkg.App, source kindpkg.Kind, table *tview.Table) 
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 
-	flex := tview.NewFlex().AddItem(table, 0, 1, true)
-	view := &simpleKindView{flex: flex, app: app, source: source}
+	root := tview.NewFlex().SetDirection(tview.FlexRow)
+	informer, hasInfo := source.(kindpkg.Informer)
+	var detailView *tview.TextView
+	if hasInfo {
+		aggView := tview.NewTextView().SetDynamicColors(true).SetText(informer.AggregateInfo())
+		aggView.SetBorder(true).SetTitle(" " + source.Breadcrumb() + " ")
+		detailView = tview.NewTextView().SetDynamicColors(true).SetText(informer.SelectionDetail())
+		detailView.SetBorder(true).SetTitle(" selection ")
+		header := tview.NewFlex().
+			AddItem(aggView, 0, 1, false).
+			AddItem(detailView, 0, 1, false)
+		// 8 rows is enough for ~5 lines of content + borders + title; tune
+		// per kind later if needed.
+		root.AddItem(header, 8, 0, false)
+	}
+	root.AddItem(table, 0, 1, true)
+
+	view := &simpleKindView{flex: root, app: app, source: source}
 
 	table.SetSelectionChangedFunc(func(row, _ int) {
 		if row <= 0 || source == nil {
@@ -83,6 +102,9 @@ func newTableKindView(app kindpkg.App, source kindpkg.Kind, table *tview.Table) 
 			return
 		}
 		source.SetSelection(cell.GetReference())
+		if detailView != nil {
+			detailView.SetText(informer.SelectionDetail())
+		}
 	})
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if view.OnKey(event) {

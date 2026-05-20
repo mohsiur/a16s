@@ -63,6 +63,23 @@ type Kind interface {
 	SecondaryActions() []Binding
 }
 
+// Informer is an optional companion interface a Kind can implement to
+// surface aggregate context (independent of the cursor) and selected-row
+// detail (recomputed as the cursor moves). When a Kind implements Informer,
+// newTableKindView renders a two-column header pane above the table —
+// matching ECS's familiar layout. Kinds that don't implement Informer get
+// just the bare table.
+type Informer interface {
+	// AggregateInfo returns the left-column text — counts, totals, account
+	// summary. Called once per Build (immediately after the API list
+	// resolves).
+	AggregateInfo() string
+	// SelectionDetail returns the right-column text for the row currently
+	// selected. Called whenever the selection changes; safe to return ""
+	// when no row is highlighted.
+	SelectionDetail() string
+}
+
 var registry = map[string]Kind{}
 
 // Register adds a Kind under its Name(). Panics on duplicate registration —
