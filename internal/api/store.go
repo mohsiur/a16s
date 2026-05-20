@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/applicationautoscaling"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
@@ -30,6 +31,7 @@ type Store struct {
 	account        *account.Client
 	lambda         *lambda.Client
 	sqs            *sqs.Client
+	dynamodb       *dynamodb.Client
 }
 
 func NewStore(profile string, region string) (*Store, error) {
@@ -85,5 +87,11 @@ func (store *Store) initLambdaClient() {
 func (store *Store) initSqsClient() {
 	if store.sqs == nil {
 		store.sqs = sqs.NewFromConfig(*store.Config)
+	}
+}
+
+func (store *Store) initDynamoDBClient() {
+	if store.dynamodb == nil {
+		store.dynamodb = dynamodb.NewFromConfig(*store.Config)
 	}
 }

@@ -39,6 +39,7 @@ func (store *Store) SwitchAwsConfig(profile string, region string) error {
 	store.account = nil
 	store.lambda = nil
 	store.sqs = nil
+	store.dynamodb = nil
 
 	slog.Info("switched AWS profile", slog.String("AWS_PROFILE", profile), slog.String("AWS_REGION", region))
 
