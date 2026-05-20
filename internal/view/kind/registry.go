@@ -80,6 +80,26 @@ type Informer interface {
 	SelectionDetail() string
 }
 
+// Preloader is an optional companion interface a Kind can implement so its
+// inventory is fetched in the background as soon as the AWS config is ready
+// — instead of on the first `:<kind>` invocation. Implementations should be
+// idempotent and safe to call concurrently with Build (Build wins on the
+// foreground; Preload populates caches the kind itself owns).
+type Preloader interface {
+	Preload(app App)
+}
+
+// PreloadAll fans out Preload across every registered Kind that opts in.
+// Each Preload runs in its own goroutine; this function does not wait. Call
+// from app startup right after AWS config resolves.
+func PreloadAll(app App) {
+	for _, k := range registry {
+		if pl, ok := k.(Preloader); ok {
+			go pl.Preload(app)
+		}
+	}
+}
+
 var registry = map[string]Kind{}
 
 // Register adds a Kind under its Name(). Panics on duplicate registration —
