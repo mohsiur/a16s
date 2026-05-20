@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
-	"github.com/keidarcy/e1s/internal/api"
-	"github.com/keidarcy/e1s/internal/color"
-	"github.com/keidarcy/e1s/internal/utils"
-	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
+	"github.com/mohsiur/a16s/internal/api"
+	"github.com/mohsiur/a16s/internal/color"
+	"github.com/mohsiur/a16s/internal/utils"
+	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 	"github.com/rivo/tview"
 )
 

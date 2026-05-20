@@ -1,7 +1,7 @@
 VERSION := $(shell grep -o 'AppVersion = "[^"]*"' internal/utils/info.go | cut -d '"' -f 2)
 
 run:
-	go run ./cmd/e1s/main.go
+	go run ./cmd/a16s/main.go
 
 test:
 	go test -v ./...

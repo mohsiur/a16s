@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/keidarcy/e1s/internal/api"
+	"github.com/mohsiur/a16s/internal/api"
 	"github.com/rivo/tview"
 )
 

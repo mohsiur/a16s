@@ -1,10 +1,10 @@
-# Build e1s in go image
+# Build a16s in go image
 FROM golang:1.26-alpine as builder
 
 # Set build argument for target architecture
 ARG TARGETARCH
 
-WORKDIR /src/e1s
+WORKDIR /src/a16s
 COPY . ./
 
  # Set the GOARCH environment variable based on the TARGETARCH
@@ -18,7 +18,7 @@ COPY . ./
        exit 1; \
      fi && \
      GOARCH=$GOARCH go mod vendor && \
-     GOARCH=$GOARCH go build -o e1s ./cmd/e1s
+     GOARCH=$GOARCH go build -o a16s ./cmd/a16s
 
 
 # Install the session manager plugin in ubuntu image
@@ -42,7 +42,7 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
      dpkg -i session-manager-plugin.deb && rm session-manager-plugin.deb
 
 FROM alpine
-COPY --from=builder /src/e1s/e1s /e1s
+COPY --from=builder /src/a16s/a16s /a16s
 COPY --from=sessionmanagerplugin /usr/local/sessionmanagerplugin/bin/session-manager-plugin /usr/local/bin/
 
 
@@ -50,4 +50,4 @@ COPY --from=sessionmanagerplugin /usr/local/sessionmanagerplugin/bin/session-man
 RUN apk add --no-cache aws-cli gcompat && \
     rm -rf /var/cache/apk/*
 
-ENTRYPOINT ["/e1s"]
+ENTRYPOINT ["/a16s"]

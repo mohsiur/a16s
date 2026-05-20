@@ -3,7 +3,7 @@ package view
 import (
 	"testing"
 
-	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
+	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 )
 
 func TestECSKindNames(t *testing.T) {

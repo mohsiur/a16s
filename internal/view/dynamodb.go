@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/gdamore/tcell/v2"
-	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
+	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 	"github.com/rivo/tview"
 	"golang.org/x/sync/errgroup"
 )

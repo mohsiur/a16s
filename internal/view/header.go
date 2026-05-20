@@ -3,7 +3,7 @@ package view
 import (
 	"fmt"
 
-	"github.com/keidarcy/e1s/internal/color"
+	"github.com/mohsiur/a16s/internal/color"
 	"github.com/rivo/tview"
 )
 

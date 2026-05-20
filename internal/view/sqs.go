@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/gdamore/tcell/v2"
-	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
+	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 	"github.com/rivo/tview"
 	"golang.org/x/sync/errgroup"
 )
@@ -144,7 +144,7 @@ func (k *sqsKind) sendAction() kindpkg.Action {
 			return nil
 		}
 		// MVP: fixed test payload. Modal input is a follow-up.
-		if err := app.APIStore().SendMessage(context.Background(), k.selectedURL, `{"e1s":"test"}`); err != nil {
+		if err := app.APIStore().SendMessage(context.Background(), k.selectedURL, `{"a16s":"test"}`); err != nil {
 			app.FlashError(err.Error())
 			return err
 		}

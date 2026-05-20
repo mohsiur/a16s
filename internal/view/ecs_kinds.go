@@ -3,7 +3,7 @@ package view
 import (
 	"errors"
 
-	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
+	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 )
 
 // ECS adapter kinds bridge the new palette to the legacy ECS pages stack.

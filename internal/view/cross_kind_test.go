@@ -9,8 +9,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	smithymiddleware "github.com/aws/smithy-go/middleware"
 
-	"github.com/keidarcy/e1s/internal/api"
-	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
+	"github.com/mohsiur/a16s/internal/api"
+	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 )
 
 func newStoreServingQueues(t *testing.T, queueURLs []string) *api.Store {

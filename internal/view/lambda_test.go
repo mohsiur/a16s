@@ -5,7 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
-	kindpkg "github.com/keidarcy/e1s/internal/view/kind"
+	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 )
 
 func TestLambdaKindName(t *testing.T) {

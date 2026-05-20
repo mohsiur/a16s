@@ -9,7 +9,7 @@ var (
 	FooterSelectedItemFmt = ""
 	FooterItemFmt         = ""
 	FooterAwsFmt          = ""
-	FooterE1sFmt          = ""
+	FooterAppFmt          = ""
 
 	HeaderTitleFmt = ""
 	HeaderItemFmt  = ""
@@ -35,7 +35,7 @@ func (c Colors) initFmt() {
 	FooterSelectedItemFmt = fmt.Sprintf("[%s:%s:b] <%%s> [-:-:-]", c.Black, c.Cyan)
 	FooterItemFmt = fmt.Sprintf("[%s:%s:] <%%s> [-:-:-]", c.Black, c.Gray)
 	FooterAwsFmt = fmt.Sprintf("[%s:%s:bi] %%s ", c.Black, c.Yellow)
-	FooterE1sFmt = fmt.Sprintf("[%s:%s:bi] %%s:%%s ", c.Black, c.Cyan)
+	FooterAppFmt = fmt.Sprintf("[%s:%s:bi] %%s:%%s ", c.Black, c.Cyan)
 
 	HeaderTitleFmt = fmt.Sprintf(" [%s]info([%s::b]%%s[%s:-:-]) ", c.Blue, c.Magenta, c.Blue)
 	HeaderItemFmt = fmt.Sprintf(" %%s:[%s::b] %%s ", c.Cyan)

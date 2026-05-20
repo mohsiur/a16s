@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/keidarcy/e1s/internal/utils"
-	e1s "github.com/keidarcy/e1s/internal/view"
+	"github.com/mohsiur/a16s/internal/utils"
+	view "github.com/mohsiur/a16s/internal/view"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -22,7 +22,7 @@ func initConfig() {
 		if err != nil {
 			home = "."
 		}
-		configFile = filepath.Join(home, ".config", "e1s", "config.yml")
+		configFile = filepath.Join(home, ".config", "a16s", "config.yml")
 	}
 
 	viper.SetConfigFile(configFile)
@@ -46,7 +46,7 @@ func init() {
 
 	defaultLogFile := filepath.Join(os.TempDir(), fmt.Sprintf("%s.log", utils.AppName))
 
-	rootCmd.Flags().StringVarP(&configFile, "config-file", "c", "", "config file (default \"$HOME/.config/e1s/config.yml\")")
+	rootCmd.Flags().StringVarP(&configFile, "config-file", "c", "", "config file (default \"$HOME/.config/a16s/config.yml\")")
 	rootCmd.Flags().BoolP("debug", "d", false, "sets debug mode")
 	rootCmd.Flags().BoolP("json", "j", false, "log output json format")
 	rootCmd.Flags().Bool("read-only", false, "sets read only mode")
@@ -68,10 +68,10 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "e1s",
-	Short: "e1s - Easily Manage AWS ECS Resources in Terminal 🐱",
-	Long: `e1s is a terminal application to easily browse and manage AWS ECS resources 🐱. 
-Check https://github.com/keidarcy/e1s for more details.`,
+	Use:   "a16s",
+	Short: "a16s - Easily Manage AWS Resources in Terminal 🐱",
+	Long: `a16s is a terminal application to easily browse and manage AWS resources 🐱.
+Check https://github.com/mohsiur/a16s for more details.`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		// Validate if service is provided, cluster must also be provided
 		service := viper.GetString("service")
@@ -108,7 +108,7 @@ Check https://github.com/keidarcy/e1s for more details.`,
 		service := viper.GetString("service")
 		splash := viper.GetBool("splash")
 
-		option := e1s.Option{
+		option := view.Option{
 			ConfigFile: configFile,
 			LogFile:    logFile,
 			Debug:      debug,
@@ -122,8 +122,8 @@ Check https://github.com/keidarcy/e1s for more details.`,
 			Splash:     splash,
 		}
 
-		if err := e1s.Start(option); err != nil {
-			fmt.Printf("e1s failed to start, please check your aws cli credential and permission. error: %v\n", err)
+		if err := view.Start(option); err != nil {
+			fmt.Printf("a16s failed to start, please check your aws cli credential and permission. error: %v\n", err)
 			slog.Error("failed to start", "error", err)
 			os.Exit(1)
 		}

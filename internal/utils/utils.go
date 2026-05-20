@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/keidarcy/e1s/internal/color"
+	"github.com/mohsiur/a16s/internal/color"
 )
 
 const (
@@ -179,7 +179,7 @@ func ShowVersion() string {
 	type ghRes struct {
 		Name string `json:"name"`
 	}
-	resp, err := http.Get("https://api.github.com/repos/keidarcy/e1s/releases/latest")
+	resp, err := http.Get("https://api.github.com/repos/mohsiur/a16s/releases/latest")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func ShowVersion() string {
 
 	message := ""
 	if latestVersion != AppVersion {
-		message = "\nPlease upgrade e1s to latest version on https://github.com/keidarcy/e1s/releases"
+		message = "\nPlease upgrade a16s to latest version on https://github.com/mohsiur/a16s/releases"
 	}
 
 	return fmt.Sprintf("\nCurrent: %s\nLatest: %s%s", AppVersion, latestVersion, message)
