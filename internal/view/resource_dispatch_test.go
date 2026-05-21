@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 )
@@ -13,6 +14,7 @@ import (
 // for sqsKind / ddbKind.
 var _ kindpkg.Resource = (*lambdaKind)(nil)
 var _ kindpkg.Resource = (*sqsKind)(nil)
+var _ kindpkg.Resource = (*ddbKind)(nil)
 
 func TestResolveResource_LambdaMigrated(t *testing.T) {
 	r := resolveResource(LambdaKind)
@@ -33,9 +35,6 @@ func TestResolveResource_SQSMigrated(t *testing.T) {
 func TestResolveResource_UnmigratedKindReturnsNil(t *testing.T) {
 	if got := resolveResource(ClusterKind); got != nil {
 		t.Fatalf("resolveResource(ClusterKind) = %T; want nil — ECS chain migrates later", got)
-	}
-	if got := resolveResource(DynamoDBKind); got != nil {
-		t.Fatalf("resolveResource(DynamoDBKind) = %T; want nil — DDB migrates later", got)
 	}
 }
 
@@ -79,6 +78,41 @@ func TestSQSKind_BrowserURL(t *testing.T) {
 		t.Fatalf("BrowserURL err = %v; want nil", err)
 	}
 	want := "https://us-east-1.console.aws.amazon.com/sqs/v3/home?region=us-east-1#/queues/https%3A%2F%2Fsqs.us-east-1.amazonaws.com%2F111122223333%2Fmy-queue"
+	if got != want {
+		t.Errorf("BrowserURL = %q; want %q", got, want)
+	}
+}
+
+// TestResolveResource_DDBMigrated pins that all three DDB enums route through
+// the same Resource. The legacy openInBrowser switch collapsed index/scan
+// pages onto the parent table URL; the dispatcher must preserve that by
+// keying every DDB enum onto "ddb".
+func TestResolveResource_DDBMigrated(t *testing.T) {
+	for _, k := range []kind{DynamoDBKind, DynamoDBIndexKind, DynamoDBScanKind} {
+		r := resolveResource(k)
+		if r == nil {
+			t.Fatalf("resolveResource(%s) = nil; want non-nil — Phase 3 migrated ddb", k)
+		}
+	}
+}
+
+func TestDDBKind_BrowserURL(t *testing.T) {
+	dk := getDDBKind()
+	if dk == nil {
+		t.Fatal("getDDBKind() = nil; ddbKind init() should have registered it")
+	}
+	t.Cleanup(dk.Reset)
+
+	if got, _ := dk.BrowserURL("us-east-1"); got != "" {
+		t.Errorf("BrowserURL with no selection = %q; want empty", got)
+	}
+
+	dk.SetSelection(&ddbTypes.TableDescription{TableName: aws.String("my-table")})
+	got, err := dk.BrowserURL("us-east-1")
+	if err != nil {
+		t.Fatalf("BrowserURL err = %v; want nil", err)
+	}
+	want := "https://us-east-1.console.aws.amazon.com/dynamodbv2/home?region=us-east-1#table?name=my-table"
 	if got != want {
 		t.Errorf("BrowserURL = %q; want %q", got, want)
 	}
