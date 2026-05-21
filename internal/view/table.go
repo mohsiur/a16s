@@ -366,12 +366,18 @@ func (v *view) handleInputCapture(event *tcell.EventKey) *tcell.EventKey {
 
 	// If it's composite keystroke, event.Key() is ctrl-char ascii code
 	switch event.Key() {
-	// Handle left arrow key
+	// Handle left arrow key. On leaf flat-kind tables the arrows fall
+	// through to tview so the user can scroll horizontally; h/Esc still
+	// navigate back from those views.
 	case tcell.KeyLeft:
-		v.handleDone(0)
+		if !v.app.kind.isFlatLeaf() {
+			v.handleDone(0)
+		}
 	// Handle right arrow key
 	case tcell.KeyRight:
-		v.handleSelected(0, 0)
+		if !v.app.kind.isFlatLeaf() {
+			v.handleSelected(0, 0)
+		}
 	case tcell.KeyCtrlZ:
 		v.handleDone(0)
 	case tcell.KeyF1:
