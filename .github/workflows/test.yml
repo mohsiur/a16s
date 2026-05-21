@@ -8,6 +8,10 @@ on:
       - 'doc/**'
       - 'LICENSE'
   pull_request:
+
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Test
