@@ -34,13 +34,5 @@ changelog:
 universal_binaries:
   - replace: true
 
-brews:
-  - name: a16s
-    homepage: https://github.com/mohsiur/a16s
-    description: a16s is a terminal application to browse and manage AWS resources (ECS, Lambda, SQS, DynamoDB), inspired by k9s.
-    repository:
-      owner: mohsiur
-      name: homebrew-tap
-
 checksum:
   name_template: '{{ .ProjectName }}_{{ .Version }}_checksums.txt'
