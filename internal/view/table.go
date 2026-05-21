@@ -411,7 +411,7 @@ func (v *view) handleInputCapture(event *tcell.EventKey) *tcell.EventKey {
 
 // Handle done event for table when press ESC
 func (v *view) handleDone(key tcell.Key) {
-	if v.app.kind == ClusterKind {
+	if v.app.kind == ProfileKind {
 		return
 	}
 	v.app.back()
@@ -555,7 +555,10 @@ func (v *view) changeSelectedValues() {
 	}
 }
 
-// Open selected resource in browser only support cluster and service
+// Open selected resource in browser. ECS kinds are routed through ArnToUrl;
+// flat kinds (lambda/sqs/ddb and their drill-downs) build the console URL
+// directly from the selected entity + the active region since they aren't
+// keyed by ARN.
 func (v *view) openInBrowser() {
 	selected, err := v.getCurrentSelection()
 	if err != nil {
@@ -564,6 +567,8 @@ func (v *view) openInBrowser() {
 	}
 	arn := ""
 	taskService := ""
+	url := ""
+	region := v.app.effectiveRegion()
 	switch v.app.kind {
 	case ClusterKind:
 		arn = *selected.cluster.ClusterArn
@@ -579,10 +584,32 @@ func (v *view) openInBrowser() {
 		arn = *v.app.taskDefinition.TaskDefinitionArn
 	case ServiceDeploymentKind:
 		arn = *v.app.serviceDeployment.ServiceDeploymentArn
+	case LambdaKind:
+		if selected.lambdaFunction != nil {
+			url = utils.LambdaFunctionURL(region, awsToString(selected.lambdaFunction.FunctionName))
+		}
+	case SQSKind:
+		url = utils.SQSQueueURL(region, selected.sqsQueueName)
+	case SQSPeekKind:
+		url = utils.SQSQueueURL(region, v.app.sqsQueueName)
+	case DynamoDBKind:
+		if selected.ddbTable != nil {
+			url = utils.DynamoDBTableURL(region, awsToString(selected.ddbTable.TableName))
+		}
+	case DynamoDBIndexKind, DynamoDBScanKind:
+		if v.app.ddbTable != nil {
+			url = utils.DynamoDBTableURL(region, awsToString(v.app.ddbTable.TableName))
+		}
+	default:
+		v.app.Notice.Warnf("open in browser not supported for %s", v.app.kind)
+		return
 	}
-	url := utils.ArnToUrl(arn, taskService)
+	if url == "" {
+		url = utils.ArnToUrl(arn, taskService)
+	}
 	if len(url) == 0 {
 		slog.Warn("open failed", "url", url, "kind", v.app.kind, "arn", arn)
+		v.app.Notice.Warnf("open in browser not supported for %s", v.app.kind)
 		return
 	}
 	slog.Info("open", "url", url)
@@ -590,4 +617,13 @@ func (v *view) openInBrowser() {
 	if err != nil {
 		v.app.Notice.Warnf("failed to open url %s\n", url)
 	}
+}
+
+// awsToString is a tiny helper so openInBrowser doesn't need to import the AWS
+// SDK just to dereference a *string. Mirrors aws.ToString without the dep.
+func awsToString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }

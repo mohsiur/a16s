@@ -111,7 +111,9 @@ func (k kind) nextKind() kind {
 
 func (k kind) prevKind() kind {
 	switch k {
-	case ClusterKind, InstanceKind:
+	case ClusterKind:
+		return ProfileKind
+	case InstanceKind:
 		return ClusterKind
 	case ProfileKind:
 		return ProfileKind
@@ -124,7 +126,7 @@ func (k kind) prevKind() kind {
 	case ContainerKind:
 		return TaskKind
 	case LambdaKind, SQSKind, DynamoDBKind:
-		return ClusterKind
+		return ProfileKind
 	case SQSPeekKind:
 		return SQSKind
 	case DynamoDBIndexKind:
@@ -132,7 +134,7 @@ func (k kind) prevKind() kind {
 	case DynamoDBScanKind:
 		return DynamoDBIndexKind
 	default:
-		return ClusterKind
+		return ProfileKind
 	}
 }
 

@@ -68,13 +68,21 @@ func parseQueueNameFromArn(arn string) string {
 }
 
 func (k *lambdaKind) Preload(app kindpkg.App) {
-	_ = k.loadInventory(app)
+	_ = k.loadInventory(app, false)
 }
 
-// loadInventory fetches the function list once and caches the result.
-// Concurrent callers single-flight on k.loadDone.
-func (k *lambdaKind) loadInventory(app kindpkg.App) error {
+// loadInventory fetches the function list and caches the result. Concurrent
+// callers single-flight on k.loadDone. When reload is true, the cache is
+// invalidated before the fetch so refresh keys (`r`) and the auto-refresh
+// ticker actually re-hit the AWS API; selection state is preserved.
+func (k *lambdaKind) loadInventory(app kindpkg.App, reload bool) error {
 	k.mu.Lock()
+	if reload {
+		k.loaded = false
+		k.fns = nil
+		k.loadErr = nil
+		k.loadDone = nil
+	}
 	if k.loaded {
 		k.mu.Unlock()
 		return nil
@@ -144,7 +152,7 @@ func (app *App) showLambdasPage(reload bool) error {
 	// data is already in hand.
 	lk := getLambdaKind()
 	if lk != nil {
-		if err := lk.loadInventory(app); err != nil {
+		if err := lk.loadInventory(app, reload); err != nil {
 			return err
 		}
 		lk.mu.RLock()

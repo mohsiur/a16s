@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -135,6 +136,33 @@ func ArnToUrl(arn string, taskService string) string {
 	default:
 		return ""
 	}
+}
+
+// LambdaFunctionURL builds the AWS console URL for a Lambda function. Returns
+// "" when region or fn are empty so callers can early-bail without panicking.
+func LambdaFunctionURL(region, fn string) string {
+	if region == "" || fn == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://%s.console.aws.amazon.com/lambda/home?region=%s#/functions/%s", region, region, url.QueryEscape(fn))
+}
+
+// SQSQueueURL builds the AWS console URL for an SQS queue. The console expects
+// the full queue URL, fully URL-encoded, after the `#/queues/` fragment.
+func SQSQueueURL(region, queueURL string) string {
+	if region == "" || queueURL == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://%s.console.aws.amazon.com/sqs/v3/home?region=%s#/queues/%s", region, region, url.QueryEscape(queueURL))
+}
+
+// DynamoDBTableURL builds the AWS console URL for a DynamoDB table. The
+// dynamodbv2 console keys the explorer view by table name in the fragment.
+func DynamoDBTableURL(region, table string) string {
+	if region == "" || table == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://%s.console.aws.amazon.com/dynamodbv2/home?region=%s#table?name=%s", region, region, table)
 }
 
 func OpenURL(url string) error {

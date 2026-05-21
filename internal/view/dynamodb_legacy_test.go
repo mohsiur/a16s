@@ -121,19 +121,21 @@ func TestDDBScanViewTableParamsBuilder(t *testing.T) {
 			"userId": &ddbTypes.AttributeValueMemberS{Value: "u-2"},
 		},
 	}
-	v := newDDBScanView("Users", "", items, app)
+	// pk="userId", no sort key → expect userId first, then remaining attrs
+	// alphabetically (just "email" here).
+	v := newDDBScanView("Users", "", "userId", "", items, app)
 	_, headers, rowsBuilder := v.tableParamsBuilder()
-	if len(headers) != 2 || headers[0] != "email" || headers[1] != "userId" {
-		t.Fatalf("headers = %v; want sorted [email userId]", headers)
+	if len(headers) != 2 || headers[0] != "userId" || headers[1] != "email" {
+		t.Fatalf("headers = %v; want pk-first [userId email]", headers)
 	}
 	rows := rowsBuilder()
 	if len(rows) != 2 {
 		t.Fatalf("rows = %d", len(rows))
 	}
-	if rows[0][0] != "a@b.com" || rows[0][1] != "u-1" {
+	if rows[0][0] != "u-1" || rows[0][1] != "a@b.com" {
 		t.Errorf("row 0 = %v", rows[0])
 	}
-	if rows[1][0] != "" || rows[1][1] != "u-2" {
+	if rows[1][0] != "u-2" || rows[1][1] != "" {
 		t.Errorf("row 1 = %v (missing attr should be empty)", rows[1])
 	}
 }

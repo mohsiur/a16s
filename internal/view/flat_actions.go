@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -18,6 +20,8 @@ import (
 // pages.
 
 // openLambdaLogs tails the selected Lambda function's CloudWatch log group.
+// Renders in an aux text page with wrap enabled; `f` suspends the TUI and
+// dumps the full log to stdout so the user can copy from terminal scrollback.
 func (v *view) openLambdaLogs() {
 	selected, err := v.getCurrentSelection()
 	if err != nil || selected.lambdaFunction == nil {
@@ -30,7 +34,7 @@ func (v *view) openLambdaLogs() {
 		v.app.Notice.Warn(err.Error())
 		return
 	}
-	v.showAuxText(" "+logGroup+" ", strings.Join(logs, ""))
+	v.showAuxLogs(" "+logGroup+" ", strings.Join(logs, ""))
 }
 
 // invokeLambda runs InvokeFunction against the selected function and renders
@@ -215,6 +219,61 @@ func (v *view) showAuxText(title, body string) {
 	tv := tview.NewTextView().SetDynamicColors(true).SetText(body).SetScrollable(true)
 	tv.SetBorder(true).SetTitle(title)
 	v.showAuxPrimitive(title, tv)
+}
+
+// showAuxLogs is showAuxText with wrap on and an `f` shortcut that suspends
+// the TUI and pipes the full body through `less -R` so users can copy long
+// log content using their terminal's normal selection. Falls back to a plain
+// stdout dump when less isn't available.
+func (v *view) showAuxLogs(title, body string) {
+	tv := tview.NewTextView().SetDynamicColors(true).SetText(body).SetScrollable(true).SetWrap(true)
+	tv.SetBorder(true).SetTitle(title + "(f: full screen)")
+	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'f':
+			v.dumpToTerminal(body)
+			return nil
+		case 'c':
+			v.app.copyToClipboard("logs", body)
+			return nil
+		}
+		return event
+	})
+	v.showAuxPrimitive(title, tv)
+}
+
+// dumpToTerminal suspends tview, writes the body to stdout (piped through
+// less -R if present so users can scroll/search), then resumes tview. Falls
+// back to plain Fprintln when no pager is available.
+func (v *view) dumpToTerminal(body string) {
+	v.app.Suspend(func() {
+		v.app.isSuspended = true
+		defer func() { v.app.isSuspended = false }()
+		if err := runPager(body); err != nil {
+			fmt.Fprintln(os.Stdout, body)
+			fmt.Fprintln(os.Stdout, "[press Enter to return]")
+			fmt.Fscanln(os.Stdin)
+		}
+	})
+}
+
+// runPager pipes body through $PAGER (or `less -R`) so terminal selection
+// works for long log dumps. Returns an error when no pager runs successfully
+// — caller falls back to a plain stdout dump.
+func runPager(body string) error {
+	pager := os.Getenv("PAGER")
+	if pager == "" {
+		pager = "less -R"
+	}
+	parts := strings.Fields(pager)
+	if len(parts) == 0 {
+		return fmt.Errorf("empty pager")
+	}
+	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd.Stdin = strings.NewReader(body)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // showAuxPrimitive accepts an arbitrary primitive (e.g. an input + status flex)

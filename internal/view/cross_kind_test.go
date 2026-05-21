@@ -46,7 +46,7 @@ func TestCrossKindLambdaToDLQ(t *testing.T) {
 
 	sk := &sqsKind{}
 	app := &fakeApp{store: store}
-	if err := sk.loadInventory(app); err != nil {
+	if err := sk.loadInventory(app, false); err != nil {
 		t.Fatalf("loadInventory err = %v", err)
 	}
 
