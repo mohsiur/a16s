@@ -529,6 +529,9 @@ func (v *view) changeSelectedValues() {
 		if selected.sqsQueueName != "" {
 			v.app.sqsQueueName = selected.sqsQueueName
 			v.app.entityName = selected.entityName
+			if sk := getSQSKind(); sk != nil {
+				sk.SetSelection(selected.sqsQueueName)
+			}
 		} else {
 			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
 			return
@@ -537,6 +540,11 @@ func (v *view) changeSelectedValues() {
 		if selected.sqsMessage != nil {
 			v.app.sqsMessage = selected.sqsMessage
 			v.app.entityName = selected.entityName
+			// SQSPeek shares sqsKind for browser routing — make sure the cached
+			// queue selection matches the active page so `o` opens this queue.
+			if sk := getSQSKind(); sk != nil && v.app.sqsQueueName != "" {
+				sk.SetSelection(v.app.sqsQueueName)
+			}
 		} else {
 			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
 			return
