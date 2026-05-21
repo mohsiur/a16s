@@ -92,16 +92,25 @@ func peekSentAge(attrs map[string]string) string {
 // the first `:sqs` is instant. Safe to call concurrently with Build —
 // loadInventory uses RWMutex.
 func (k *sqsKind) Preload(app kindpkg.App) {
-	_ = k.loadInventory(app)
+	_ = k.loadInventory(app, false)
 }
 
-// loadInventory fetches the queue list + attributes once and caches the
-// result. Concurrent callers single-flight on k.loadDone — the first caller
-// runs the fetch and closes the channel; subsequent callers (including
-// Preload + a fast `:sqs`) block on the channel and read the shared result.
-// After Reset() the cycle restarts.
-func (k *sqsKind) loadInventory(app kindpkg.App) error {
+// loadInventory fetches the queue list + attributes and caches the result.
+// Concurrent callers single-flight on k.loadDone — the first caller runs the
+// fetch and closes the channel; subsequent callers (including Preload + a
+// fast `:sqs`) block on the channel and read the shared result. When reload
+// is true, the cache is invalidated before the fetch so refresh keys (`r`)
+// and the auto-refresh ticker actually re-hit the AWS API; selectedURL is
+// preserved.
+func (k *sqsKind) loadInventory(app kindpkg.App, reload bool) error {
 	k.mu.Lock()
+	if reload {
+		k.loaded = false
+		k.urls = nil
+		k.attrsByURL = nil
+		k.loadErr = nil
+		k.loadDone = nil
+	}
 	if k.loaded {
 		k.mu.Unlock()
 		return nil
@@ -207,7 +216,7 @@ func (app *App) showQueuesPage(reload bool) error {
 	}
 	sk := getSQSKind()
 	if sk != nil {
-		if err := sk.loadInventory(app); err != nil {
+		if err := sk.loadInventory(app, reload); err != nil {
 			return err
 		}
 		// Promote any bare-name selection (e.g. cross-kind nav from Lambda DLQ)

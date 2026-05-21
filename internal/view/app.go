@@ -316,7 +316,7 @@ func (app *App) getPageHandle() string {
 func (app *App) start() error {
 	var err error
 	if app.Option.Cluster == "" {
-		err = app.showPrimaryKindPage(ClusterKind, false)
+		err = app.showPrimaryKindPage(ProfileKind, false)
 	} else {
 		app.cluster.ClusterName = &app.Option.Cluster
 		if app.Option.Service == "" {
@@ -334,19 +334,60 @@ func (app *App) start() error {
 		go func() {
 			for {
 				<-ticker.C
-				if app.secondaryKind == EmptyKind && !app.isSuspended {
-					// tview is not thread-safe: UI updates must run on the main loop
-					app.QueueUpdateDraw(func() {
-						if err := app.showPrimaryKindPage(app.kind, true); err != nil {
-							// showPrimaryKindPage already shows error in Notice
-						}
-						slog.Debug("Auto refresh")
-					})
+				if app.secondaryKind != EmptyKind || app.isSuspended {
+					continue
 				}
+				// Refresh runs in two phases so the AWS round-trip never
+				// blocks the tview event loop. Phase 1 (here): refresh the
+				// flat-kind cache off the event loop. Phase 2 (below, inside
+				// QueueUpdateDraw): rebuild the page from the warm cache.
+				// We pass reload=false to showPrimaryKindPage so loadInventory
+				// short-circuits on `k.loaded` and we get exactly one network
+				// round-trip per tick. ECS show*Pages refetch synchronously,
+				// so for those the stutter is unavoidable here without a
+				// bigger refactor — accepted because cluster/service/task
+				// inventories are small.
+				app.preheatKindForRefresh(app.kind)
+				app.QueueUpdateDraw(func() {
+					// Drop the cached page so switchPage doesn't short-circuit
+					// on its existence and skip the rebuild. Without this we
+					// would refresh the underlying cache but never see the
+					// new rows.
+					if pageName := app.kind.getAppPageName(app.getPageHandle()); app.Pages.HasPage(pageName) {
+						app.Pages.RemovePage(pageName)
+					}
+					if err := app.showPrimaryKindPage(app.kind, false); err != nil {
+						// showPrimaryKindPage already shows error in Notice
+					}
+					slog.Debug("Auto refresh")
+				})
 			}
 		}()
 	}
 	return err
+}
+
+// preheatKindForRefresh runs the inventory fetch for kind k off the tview
+// event loop so the auto-refresh ticker doesn't block scroll input behind a
+// multi-second AWS round-trip. Only flat kinds with a kindpkg cache are
+// handled — ECS kinds fetch inside their show*Page and the inventories are
+// small enough that the inline stutter is tolerable. No-op when the kind
+// has no preheatable cache.
+func (app *App) preheatKindForRefresh(k kind) {
+	switch k {
+	case LambdaKind:
+		if lk := getLambdaKind(); lk != nil {
+			_ = lk.loadInventory(app, true)
+		}
+	case SQSKind:
+		if sk := getSQSKind(); sk != nil {
+			_ = sk.loadInventory(app, true)
+		}
+	case DynamoDBKind:
+		if dk := getDDBKind(); dk != nil {
+			_ = dk.loadInventory(app, true)
+		}
+	}
 }
 
 // Show Primary kind page
@@ -357,6 +398,10 @@ func (app *App) showPrimaryKindPage(k kind, reload bool) error {
 	}
 	app.kind = k
 	switch k {
+	case ProfileKind:
+		err = app.showProfilesPage(reload)
+	case RegionKind:
+		err = app.showRegionsPage(reload)
 	case ClusterKind:
 		err = app.showClustersPage(reload)
 	case InstanceKind:
@@ -484,6 +529,17 @@ func (app *App) copyToClipboard(item string, content string) {
 // (not Store) because the *App struct already embeds *api.Store, whose name
 // is promoted as Store — defining a Store() method would collide.
 func (app *App) APIStore() *api.Store { return app.Store }
+
+// effectiveRegion returns the active AWS region. Prefer the resolved region on
+// the loaded SDK config (populated for SSO/shared-config profiles where
+// AWS_REGION isn't set), fall back to globalRegion (set from AWS_REGION env or
+// the in-app region picker).
+func (app *App) effectiveRegion() string {
+	if app.Store != nil && app.Store.Config != nil && app.Store.Config.Region != "" {
+		return app.Store.Config.Region
+	}
+	return globalRegion
+}
 
 // FlashError surfaces an error message in the footer notice. Satisfies kind.App.
 func (app *App) FlashError(msg string) {

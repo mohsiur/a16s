@@ -18,16 +18,17 @@ var paletteExitVerbs = map[string]struct{}{
 // paletteKinds maps palette verbs to `kind` enum values. Every browseable
 // resource lands on its showPrimaryKindPage entry — there's no longer a
 // kindpkg-Palette fallback because all kinds use the legacy ECS chrome.
+// Canonical plurals match kind.String(); short service names (sqs, ddb,
+// dynamodb) are kept as aliases because that's what users actually type.
 var paletteKinds = map[string]kind{
+	"profiles": ProfileKind,
 	"clusters": ClusterKind,
-	"cluster":  ClusterKind,
-	"lambda":   LambdaKind,
 	"lambdas":  LambdaKind,
-	"sqs":      SQSKind,
 	"queues":   SQSKind,
+	"sqs":      SQSKind,
+	"tables":   DynamoDBKind,
 	"ddb":      DynamoDBKind,
 	"dynamodb": DynamoDBKind,
-	"tables":   DynamoDBKind,
 }
 
 // showPalette mounts a `:` InputField as a 1-row item at the top of mainScreen

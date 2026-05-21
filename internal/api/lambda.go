@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 )
@@ -12,13 +13,13 @@ import (
 // internally; returns whatever it has on the first error after the first
 // page (matches ListClusters behaviour in cluster.go).
 func (store *Store) ListFunctions(ctx context.Context) ([]lambdaTypes.FunctionConfiguration, error) {
-	store.initLambdaClient()
+	c := store.initLambdaClient()
 	slog.Debug("api ListFunctions")
 
 	var out []lambdaTypes.FunctionConfiguration
 	var marker *string
 	for {
-		resp, err := store.lambda.ListFunctions(ctx, &lambda.ListFunctionsInput{Marker: marker})
+		resp, err := c.ListFunctions(ctx, &lambda.ListFunctionsInput{Marker: marker})
 		if err != nil {
 			slog.Error("ListFunctions failed", "error", err)
 			if len(out) == 0 {
@@ -37,18 +38,25 @@ func (store *Store) ListFunctions(ctx context.Context) ([]lambdaTypes.FunctionCo
 // GetFunction returns the full configuration for a single function (env vars,
 // VPC config, layers, DLQ — anything not in the ListFunctions summary).
 func (store *Store) GetFunction(ctx context.Context, name string) (*lambda.GetFunctionOutput, error) {
-	store.initLambdaClient()
+	c := store.initLambdaClient()
 	slog.Debug("api GetFunction", "name", name)
-	return store.lambda.GetFunction(ctx, &lambda.GetFunctionInput{FunctionName: &name})
+	return c.GetFunction(ctx, &lambda.GetFunctionInput{FunctionName: &name})
 }
 
 // InvokeFunction invokes a function with the given payload (raw JSON bytes).
 // Always uses RequestResponse so the caller can show the result.
 func (store *Store) InvokeFunction(ctx context.Context, name string, payload []byte) (*lambda.InvokeOutput, error) {
-	store.initLambdaClient()
+	c := store.initLambdaClient()
 	slog.Debug("api InvokeFunction", "name", name, "payloadBytes", len(payload))
-	return store.lambda.Invoke(ctx, &lambda.InvokeInput{
+	return c.Invoke(ctx, &lambda.InvokeInput{
 		FunctionName: &name,
 		Payload:      payload,
 	})
+}
+
+// StoreWithLambdaForTest constructs a Store with a pre-configured Lambda client.
+// Mirrors StoreWithSqsForTest — the only entry point for view-package tests
+// that need to mock Lambda at the SDK middleware layer.
+func StoreWithLambdaForTest(cfg *aws.Config, c *lambda.Client) *Store {
+	return &Store{Config: cfg, lambda: c}
 }

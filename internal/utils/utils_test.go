@@ -147,6 +147,90 @@ func TestGetRegistryInfo(t *testing.T) {
 	}
 }
 
+func TestLambdaFunctionURL(t *testing.T) {
+	tests := []struct {
+		name   string
+		region string
+		fn     string
+		want   string
+	}{
+		{
+			name:   "simple",
+			region: "eu-west-1",
+			fn:     "my-function",
+			want:   "https://eu-west-1.console.aws.amazon.com/lambda/home?region=eu-west-1#/functions/my-function",
+		},
+		{
+			name:   "name with spaces is encoded",
+			region: "us-east-1",
+			fn:     "my function",
+			want:   "https://us-east-1.console.aws.amazon.com/lambda/home?region=us-east-1#/functions/my+function",
+		},
+		{name: "empty region returns empty", region: "", fn: "x", want: ""},
+		{name: "empty fn returns empty", region: "us-east-1", fn: "", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := LambdaFunctionURL(tt.region, tt.fn)
+			if got != tt.want {
+				t.Errorf("LambdaFunctionURL(%q, %q) = %q, want %q", tt.region, tt.fn, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSQSQueueURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		region   string
+		queueURL string
+		want     string
+	}{
+		{
+			name:     "full queue url is encoded",
+			region:   "eu-west-1",
+			queueURL: "https://sqs.eu-west-1.amazonaws.com/111/my-queue",
+			want:     "https://eu-west-1.console.aws.amazon.com/sqs/v3/home?region=eu-west-1#/queues/https%3A%2F%2Fsqs.eu-west-1.amazonaws.com%2F111%2Fmy-queue",
+		},
+		{name: "empty region returns empty", region: "", queueURL: "x", want: ""},
+		{name: "empty queue returns empty", region: "eu-west-1", queueURL: "", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := SQSQueueURL(tt.region, tt.queueURL)
+			if got != tt.want {
+				t.Errorf("SQSQueueURL(%q, %q) = %q, want %q", tt.region, tt.queueURL, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDynamoDBTableURL(t *testing.T) {
+	tests := []struct {
+		name   string
+		region string
+		table  string
+		want   string
+	}{
+		{
+			name:   "simple",
+			region: "eu-west-1",
+			table:  "Users",
+			want:   "https://eu-west-1.console.aws.amazon.com/dynamodbv2/home?region=eu-west-1#table?name=Users",
+		},
+		{name: "empty region returns empty", region: "", table: "x", want: ""},
+		{name: "empty table returns empty", region: "eu-west-1", table: "", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := DynamoDBTableURL(tt.region, tt.table)
+			if got != tt.want {
+				t.Errorf("DynamoDBTableURL(%q, %q) = %q, want %q", tt.region, tt.table, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseAge(t *testing.T) {
 	tests := []struct {
 		s    string

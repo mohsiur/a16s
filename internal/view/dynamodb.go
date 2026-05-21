@@ -153,16 +153,26 @@ func ddbAttrToString(av ddbTypes.AttributeValue) string {
 // the first `:ddb` is instant. Safe to call concurrently with Build —
 // loadInventory uses RWMutex.
 func (k *ddbKind) Preload(app kindpkg.App) {
-	_ = k.loadInventory(app)
+	_ = k.loadInventory(app, false)
 }
 
-// loadInventory fetches the table list + descriptions once and caches the
-// result. Concurrent callers single-flight on k.loadDone — the first caller
-// runs the fetch and closes the channel; subsequent callers (including
-// Preload + a fast `:ddb`) block on the channel and read the shared result.
-// After Reset() the cycle restarts.
-func (k *ddbKind) loadInventory(app kindpkg.App) error {
+// loadInventory fetches the table list + descriptions and caches the result.
+// Concurrent callers single-flight on k.loadDone — the first caller runs the
+// fetch and closes the channel; subsequent callers (including Preload + a
+// fast `:ddb`) block on the channel and read the shared result. When reload
+// is true, the cache is invalidated before the fetch so refresh keys (`r`)
+// and the auto-refresh ticker actually re-hit the AWS API; selection state
+// is preserved.
+func (k *ddbKind) loadInventory(app kindpkg.App, reload bool) error {
 	k.mu.Lock()
+	if reload {
+		k.loaded = false
+		k.names = nil
+		k.descs = nil
+		k.descErrs = nil
+		k.loadErr = nil
+		k.loadDone = nil
+	}
 	if k.loaded {
 		k.mu.Unlock()
 		return nil
@@ -259,7 +269,7 @@ func (app *App) showTablesPage(reload bool) error {
 	}
 	dk := getDDBKind()
 	if dk != nil {
-		if err := dk.loadInventory(app); err != nil {
+		if err := dk.loadInventory(app, reload); err != nil {
 			return err
 		}
 		dk.mu.RLock()
@@ -490,13 +500,15 @@ func (v *ddbIndexView) tableParamsBuilder() (title string, headers []string, row
 
 type ddbScanView struct {
 	view
-	tableName string
-	indexName string
-	items     []map[string]ddbTypes.AttributeValue
-	attrs     []string
+	tableName    string
+	indexName    string
+	partitionKey string
+	sortKey      string
+	items        []map[string]ddbTypes.AttributeValue
+	attrs        []string
 }
 
-func newDDBScanView(tableName, indexName string, items []map[string]ddbTypes.AttributeValue, app *App) *ddbScanView {
+func newDDBScanView(tableName, indexName, partitionKey, sortKey string, items []map[string]ddbTypes.AttributeValue, app *App) *ddbScanView {
 	keys := append(basicKeyInputs, []keyDescriptionPair{
 		hotKeyMap["enter"],
 	}...)
@@ -506,19 +518,39 @@ func newDDBScanView(tableName, indexName string, items []map[string]ddbTypes.Att
 			attrSet[k] = struct{}{}
 		}
 	}
-	attrs := make([]string, 0, len(attrSet))
+	// Order: partition key first, sort key second (when present), then the
+	// rest alphabetically. The pk-first ordering matches what users expect
+	// from the AWS console and makes scrolling tall result sets readable.
+	rest := make([]string, 0, len(attrSet))
 	for a := range attrSet {
-		attrs = append(attrs, a)
+		if a == partitionKey || a == sortKey {
+			continue
+		}
+		rest = append(rest, a)
 	}
-	sort.Strings(attrs)
+	sort.Strings(rest)
+	attrs := make([]string, 0, len(attrSet))
+	if partitionKey != "" {
+		if _, ok := attrSet[partitionKey]; ok {
+			attrs = append(attrs, partitionKey)
+		}
+	}
+	if sortKey != "" && sortKey != partitionKey {
+		if _, ok := attrSet[sortKey]; ok {
+			attrs = append(attrs, sortKey)
+		}
+	}
+	attrs = append(attrs, rest...)
 	return &ddbScanView{
 		view: *newView(app, keys, secondaryPageKeyMap{
 			DescriptionKind: describePageKeys,
 		}),
-		tableName: tableName,
-		indexName: indexName,
-		items:     items,
-		attrs:     attrs,
+		tableName:    tableName,
+		indexName:    indexName,
+		partitionKey: partitionKey,
+		sortKey:      sortKey,
+		items:        items,
+		attrs:        attrs,
 	}
 }
 
@@ -534,9 +566,11 @@ func (app *App) showIndexItemsPage(reload bool) error {
 	}
 	tableName := aws.ToString(app.ddbTable.TableName)
 	indexName := app.ddbIndex.name
+	pk := app.ddbIndex.partitionKey
+	sk := app.ddbIndex.sortKey
 	items, err := app.Store.ScanIndexFirstPage(context.Background(), tableName, indexName, 25)
 	return buildResourcePage(items, app, err, func() resourceViewBuilder {
-		return newDDBScanView(tableName, indexName, items, app)
+		return newDDBScanView(tableName, indexName, pk, sk, items, app)
 	})
 }
 
