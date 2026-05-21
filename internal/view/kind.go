@@ -138,6 +138,19 @@ func (k kind) prevKind() kind {
 	}
 }
 
+// isFlatLeaf reports whether the kind is a flat (non-ECS) leaf table whose
+// rows can have many wide columns the user wants to scroll through with the
+// arrow keys. On these views the arrow keys fall through to tview so it can
+// move the column offset; h/Esc still navigate back.
+func (k kind) isFlatLeaf() bool {
+	switch k {
+	case LambdaKind, SQSPeekKind, DynamoDBScanKind:
+		return true
+	default:
+		return false
+	}
+}
+
 // App page name is kind string + "." + cluster arn
 func (k kind) getAppPageName(name string) string {
 	prefix := globalProfile + "." + globalRegion
