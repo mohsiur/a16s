@@ -5,16 +5,25 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	"github.com/mohsiur/a16s/internal/utils"
 	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 )
 
-// Compile-time pin: lambdaKind must satisfy the wider Resource interface so
-// the dispatcher can route through it. Phase 3 PRs add equivalent assertions
-// for sqsKind / ddbKind.
-var _ kindpkg.Resource = (*lambdaKind)(nil)
-var _ kindpkg.Resource = (*sqsKind)(nil)
-var _ kindpkg.Resource = (*ddbKind)(nil)
+// Compile-time pins: every kind in resourceRegistryName must satisfy the
+// wider Resource interface so the dispatcher can route through it.
+var (
+	_ kindpkg.Resource = (*lambdaKind)(nil)
+	_ kindpkg.Resource = (*sqsKind)(nil)
+	_ kindpkg.Resource = (*ddbKind)(nil)
+	_ kindpkg.Resource = (*clusterKind)(nil)
+	_ kindpkg.Resource = (*serviceKind)(nil)
+	_ kindpkg.Resource = (*taskKind)(nil)
+	_ kindpkg.Resource = (*containerKind)(nil)
+	_ kindpkg.Resource = (*taskDefinitionKind)(nil)
+	_ kindpkg.Resource = (*serviceDeploymentKind)(nil)
+)
 
 func TestResolveResource_LambdaMigrated(t *testing.T) {
 	r := resolveResource(LambdaKind)
@@ -33,8 +42,72 @@ func TestResolveResource_SQSMigrated(t *testing.T) {
 }
 
 func TestResolveResource_UnmigratedKindReturnsNil(t *testing.T) {
-	if got := resolveResource(ClusterKind); got != nil {
-		t.Fatalf("resolveResource(ClusterKind) = %T; want nil — ECS chain migrates later", got)
+	if got := resolveResource(InstanceKind); got != nil {
+		t.Fatalf("resolveResource(InstanceKind) = %T; want nil — instance not migrated", got)
+	}
+}
+
+func TestResolveResource_ECSChainMigrated(t *testing.T) {
+	for _, k := range []kind{ClusterKind, ServiceKind, TaskKind, ContainerKind, TaskDefinitionKind, ServiceDeploymentKind} {
+		if r := resolveResource(k); r == nil {
+			t.Errorf("resolveResource(%v) = nil; want non-nil — ECS chain migrated in Phase 3", k)
+		}
+	}
+}
+
+func TestClusterKind_BrowserURL(t *testing.T) {
+	ck := getClusterKind()
+	if ck == nil {
+		t.Fatal("getClusterKind() = nil; init() should have registered it")
+	}
+	t.Cleanup(ck.Reset)
+
+	if got, _ := ck.BrowserURL("us-east-1"); got != "" {
+		t.Errorf("BrowserURL with no selection = %q; want empty", got)
+	}
+
+	arn := "arn:aws:ecs:us-east-1:111111111111:cluster/my-cluster"
+	ck.SetSelection(&ecsTypes.Cluster{ClusterArn: aws.String(arn)})
+	got, err := ck.BrowserURL("us-east-1")
+	if err != nil {
+		t.Fatalf("BrowserURL err = %v; want nil", err)
+	}
+	want := utils.ArnToUrl(arn, "")
+	if got != want {
+		t.Errorf("BrowserURL = %q; want %q", got, want)
+	}
+}
+
+func TestTaskKind_BrowserURL(t *testing.T) {
+	tk := getTaskKind()
+	sk := getServiceKind()
+	if tk == nil || sk == nil {
+		t.Fatal("task/service kind not registered")
+	}
+	t.Cleanup(tk.Reset)
+	t.Cleanup(sk.Reset)
+
+	if got, _ := tk.BrowserURL("us-east-1"); got != "" {
+		t.Errorf("BrowserURL with no selection = %q; want empty", got)
+	}
+
+	taskArn := "arn:aws:ecs:us-east-1:111111111111:task/my-cluster/abc123"
+	tk.SetSelection(&ecsTypes.Task{TaskArn: aws.String(taskArn)})
+	if got, _ := tk.BrowserURL("us-east-1"); got != "" {
+		t.Errorf("BrowserURL without service context = %q; want empty (legacy fallthrough)", got)
+	}
+
+	sk.SetSelection(&ecsTypes.Service{
+		ServiceName: aws.String("my-service"),
+		ServiceArn:  aws.String("arn:aws:ecs:us-east-1:111111111111:service/my-cluster/my-service"),
+	})
+	got, err := tk.BrowserURL("us-east-1")
+	if err != nil {
+		t.Fatalf("BrowserURL err = %v; want nil", err)
+	}
+	want := utils.ArnToUrl(taskArn, "my-service")
+	if got != want {
+		t.Errorf("BrowserURL = %q; want %q", got, want)
 	}
 }
 

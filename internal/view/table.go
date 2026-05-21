@@ -454,6 +454,9 @@ func (v *view) changeSelectedValues() {
 		if cluster != nil {
 			v.app.cluster = cluster
 			v.app.entityName = *cluster.ClusterArn
+			if ck := getClusterKind(); ck != nil {
+				ck.SetSelection(cluster)
+			}
 		} else {
 			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
 			return
@@ -463,6 +466,9 @@ func (v *view) changeSelectedValues() {
 		if service != nil {
 			v.app.service = service
 			v.app.entityName = *service.ServiceArn
+			if sk := getServiceKind(); sk != nil {
+				sk.SetSelection(service)
+			}
 		} else {
 			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
 			return
@@ -473,6 +479,9 @@ func (v *view) changeSelectedValues() {
 
 			v.app.task = task
 			v.app.entityName = *task.TaskArn
+			if tk := getTaskKind(); tk != nil {
+				tk.SetSelection(task)
+			}
 		} else {
 			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
 			return
@@ -482,6 +491,9 @@ func (v *view) changeSelectedValues() {
 		if container != nil {
 			v.app.container = selected.container
 			v.app.entityName = *container.ContainerArn
+			if ck := getContainerKind(); ck != nil {
+				ck.SetSelection(container)
+			}
 		} else {
 			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
 			return
@@ -491,6 +503,9 @@ func (v *view) changeSelectedValues() {
 		if taskDefinition != nil {
 			v.app.taskDefinition = selected.taskDefinition
 			v.app.entityName = *taskDefinition.TaskDefinitionArn
+			if tdk := getTaskDefinitionKind(); tdk != nil {
+				tdk.SetSelection(taskDefinition)
+			}
 		} else {
 			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
 			return
@@ -500,6 +515,9 @@ func (v *view) changeSelectedValues() {
 		if serviceDeployment != nil {
 			v.app.serviceDeployment = selected.serviceDeployment
 			v.app.entityName = *serviceDeployment.ServiceDeploymentArn
+			if sdk := getServiceDeploymentKind(); sdk != nil {
+				sdk.SetSelection(serviceDeployment)
+			}
 		} else {
 			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
 			return

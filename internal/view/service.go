@@ -59,6 +59,9 @@ func (app *App) showServicesPage(reload bool) error {
 			if *s.ServiceName == app.Option.Service {
 				app.service = &s
 				app.events = s.Events
+				if sk := getServiceKind(); sk != nil {
+					sk.SetSelection(&s)
+				}
 				err = app.showPrimaryKindPage(TaskKind, false)
 				if err != nil {
 					return err
