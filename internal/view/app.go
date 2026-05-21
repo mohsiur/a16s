@@ -78,7 +78,9 @@ type Option struct {
 	Splash bool
 }
 
-// tview App
+// App is the tview application root: it embeds tview.Application and
+// tview.Pages, owns the navigation/Notice surface, and holds the active
+// Entity selection state used across kind switches.
 type App struct {
 	// tview Application
 	*tview.Application
@@ -356,9 +358,8 @@ func (app *App) start() error {
 					if pageName := app.kind.getAppPageName(app.getPageHandle()); app.Pages.HasPage(pageName) {
 						app.Pages.RemovePage(pageName)
 					}
-					if err := app.showPrimaryKindPage(app.kind, false); err != nil {
-						// showPrimaryKindPage already shows error in Notice
-					}
+					// showPrimaryKindPage already shows the error in Notice
+					_ = app.showPrimaryKindPage(app.kind, false)
 					slog.Debug("Auto refresh")
 				})
 			}

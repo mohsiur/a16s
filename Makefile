@@ -6,8 +6,14 @@ run:
 test:
 	go test -v ./...
 
+test-race:
+	go test -race ./...
+
 vet:
-	go vet
+	go vet ./...
+
+lint:
+	docker run --rm -v "$(PWD):/app" -w /app golangci/golangci-lint:latest golangci-lint run
 
 tag:
 	echo "Tagging version $(VERSION)"
@@ -26,4 +32,6 @@ apply:
 	install \
 	build \
 	vet \
-	test
+	test \
+	test-race \
+	lint

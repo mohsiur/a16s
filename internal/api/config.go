@@ -293,10 +293,7 @@ func (store *Store) ListRegions() ([]Region, error) {
 	}
 
 	sort.Slice(results, func(i, j int) bool {
-		if results[i].Enabled == "Disabled" {
-			return false
-		}
-		return true
+		return results[i].Enabled != "Disabled"
 	})
 
 	return results, nil

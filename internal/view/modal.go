@@ -30,15 +30,6 @@ func (v *view) showFormModal(formContentFn func() (*tview.Form, *string), height
 	v.app.Pages.AddPage(*title, ui.Modal(content, 100, height, 0, v.closeModal), true, true)
 }
 
-// Show search modal with form
-func (v *view) showSearchFormModal(formContentFn func() (*tview.Form, *string), height int) {
-	content, title := formContentFn()
-	if content == nil {
-		return
-	}
-	v.app.Pages.AddPage(*title, ui.Modal(content, 100, height, 7, v.closeModal), true, true)
-}
-
 // Show task definition register confirm modal
 func (v *view) showTaskDefinitionConfirm(fn func()) {
 	if v.app.kind != TaskDefinitionKind {

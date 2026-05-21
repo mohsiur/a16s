@@ -103,7 +103,7 @@ func (v *view) shouldShow(row []string, filterText string) bool {
 	headerKey := strings.Trim(parts[0], " ")
 	value := strings.Trim(parts[1], " ")
 	for i, header := range v.headers {
-		if strings.ToLower(header) == strings.ToLower(headerKey) {
+		if strings.EqualFold(header, headerKey) {
 			return strings.Contains(strings.ToLower(row[i]), strings.ToLower(value))
 		}
 	}
