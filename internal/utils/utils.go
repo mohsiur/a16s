@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os/exec"
@@ -203,32 +203,62 @@ func BuildMeterText(f float64) string {
 	return meterVal + " " + fmt.Sprintf("%.2f", f) + "%"
 }
 
+// ShowVersion returns the version string shown by `a16s --version`. It best-
+// effort fetches the latest release from GitHub to surface an upgrade hint,
+// but never blocks startup or crashes the CLI: any network/parse failure
+// degrades to printing only the current AppVersion. Cobra calls this during
+// command construction, so even `a16s --help` runs through here — failing
+// fast here used to crash the app whenever GitHub was unreachable.
 func ShowVersion() string {
-	type ghRes struct {
-		Name string `json:"name"`
-	}
-	resp, err := http.Get("https://api.github.com/repos/mohsiur/a16s/releases/latest")
+	latestVersion, err := fetchLatestVersion()
 	if err != nil {
-		log.Fatal(err)
+		slog.Debug("version check failed", "error", err)
+		return fmt.Sprintf("\nCurrent: %s", AppVersion)
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-	var rsp ghRes
-	if err := json.Unmarshal(body, &rsp); err != nil {
-		log.Fatal(err)
-	}
-	latestVersion := rsp.Name
 
 	message := ""
 	if latestVersion != AppVersion {
 		message = "\nPlease upgrade a16s to latest version on https://github.com/mohsiur/a16s/releases"
 	}
-
 	return fmt.Sprintf("\nCurrent: %s\nLatest: %s%s", AppVersion, latestVersion, message)
+}
+
+// versionCheckTimeout caps the GitHub round-trip during `--version`. Kept
+// short because the call blocks cobra's command construction.
+const versionCheckTimeout = 2 * time.Second
+
+// latestReleaseURL is the GitHub releases endpoint hit by fetchLatestVersion.
+// Kept as a package var so tests can point at a httptest.Server without
+// touching the network.
+var latestReleaseURL = "https://api.github.com/repos/mohsiur/a16s/releases/latest"
+
+func fetchLatestVersion() (string, error) {
+	type ghRes struct {
+		Name string `json:"name"`
+	}
+	client := &http.Client{Timeout: versionCheckTimeout}
+	resp, err := client.Get(latestReleaseURL)
+	if err != nil {
+		return "", fmt.Errorf("github request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("github status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read body: %w", err)
+	}
+	var rsp ghRes
+	if err := json.Unmarshal(body, &rsp); err != nil {
+		return "", fmt.Errorf("decode body: %w", err)
+	}
+	if rsp.Name == "" {
+		return "", fmt.Errorf("empty release name")
+	}
+	return rsp.Name, nil
 }
 
 func Age(t *time.Time) string {
