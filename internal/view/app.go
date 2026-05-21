@@ -121,11 +121,6 @@ type App struct {
 	bootstrapServices []types.Service
 	// Set when splash bootstrap fails before Run() returns; read after Run().
 	splashStartupErr error
-	// activeKind is non-nil when the user is browsing a flat kind via the `:`
-	// palette. ECS legacy drill-down code paths ignore it.
-	activeKind kindpkg.Kind
-	// palette is the `:` command-mode dispatcher; lazily initialised by showPalette.
-	palette *kindpkg.Palette
 }
 
 func newApp(option Option) (*App, error) {
@@ -194,13 +189,6 @@ func Start(option Option) error {
 	}
 
 	api.OnConfigSwitch = kindpkg.ResetAll
-
-	app.Pages.SetChangedFunc(func() {
-		name, _ := app.Pages.GetFrontPage()
-		if !strings.HasPrefix(name, "kind.") {
-			app.activeKind = nil
-		}
-	})
 
 	app.SetInputCapture(app.globalInputHandle)
 
@@ -346,7 +334,7 @@ func (app *App) start() error {
 		go func() {
 			for {
 				<-ticker.C
-				if app.secondaryKind == EmptyKind && !app.isSuspended && app.activeKind == nil {
+				if app.secondaryKind == EmptyKind && !app.isSuspended {
 					// tview is not thread-safe: UI updates must run on the main loop
 					app.QueueUpdateDraw(func() {
 						if err := app.showPrimaryKindPage(app.kind, true); err != nil {
@@ -502,31 +490,3 @@ func (app *App) FlashError(msg string) {
 	app.Notice.Warn(msg)
 }
 
-// SwitchView swaps the main pane to a kind's view and updates active-kind
-// state. Satisfies kind.App.
-//
-// ECS adapter kinds (Phase 5) return a *noopView and navigate via the existing
-// pages stack themselves; in that case we leave activeKind nil so table.go's
-// legacy row-change handler keeps updating the header pane as the user scrolls.
-func (app *App) SwitchView(k kindpkg.Kind, v kindpkg.View) error {
-	slog.Debug("kind switch", "kind", k.Name())
-	if _, isNoop := v.(*noopView); isNoop {
-		app.activeKind = nil
-		return nil
-	}
-	app.activeKind = k
-	pageName := "kind." + k.Name()
-	app.Pages.AddAndSwitchToPage(pageName, v.Render(), true)
-	return nil
-}
-
-// Back removes the current front page if it is a kind page, causing tview to
-// re-show the previously visible page. Satisfies kind.App. Used by Esc on a
-// flat-kind view (see simpleKindView.OnKey).
-func (app *App) Back() {
-	name, _ := app.Pages.GetFrontPage()
-	if !strings.HasPrefix(name, "kind.") {
-		return
-	}
-	app.Pages.RemovePage(name)
-}

@@ -2,9 +2,7 @@ package view
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 
@@ -16,10 +14,9 @@ import (
 	"github.com/rivo/tview"
 )
 
-// lambdaKind is retained as the cross-process inventory cache + secondary
-// action source. It still implements kindpkg.Kind so tests and the existing
-// kindpkg layer keep compiling, but the palette now dispatches through
-// showLambdasPage instead of going through kindpkg.Build.
+// lambdaKind is the cross-process inventory cache for Lambda. It implements
+// kindpkg.Kind so the palette/preload registry can find it, but the actual
+// rendering goes through showLambdasPage + the legacy ECS chrome.
 func init() { kindpkg.Register(&lambdaKind{}) }
 
 type lambdaKind struct {
@@ -56,55 +53,6 @@ func (k *lambdaKind) SetSelection(s any) {
 	}
 }
 
-func (k *lambdaKind) Breadcrumb() string {
-	if k.selected == nil || k.selected.FunctionName == nil {
-		return "lambda"
-	}
-	return "lambda > " + aws.ToString(k.selected.FunctionName)
-}
-
-func (k *lambdaKind) PrimaryAction() kindpkg.Action {
-	return func(app kindpkg.App) error {
-		if k.selected == nil {
-			app.FlashError("no function selected")
-			return nil
-		}
-		logGroup := "/aws/lambda/" + aws.ToString(k.selected.FunctionName)
-		return openLogGroupTail(app, logGroup)
-	}
-}
-
-func (k *lambdaKind) SecondaryActions() []kindpkg.Binding {
-	return []kindpkg.Binding{
-		{Key: 'i', Label: "invoke", Run: k.invokeAction()},
-		{Key: 'd', Label: "dlq", Run: k.dlqAction()},
-		{Key: 'c', Label: "config", Run: k.configAction()},
-	}
-}
-
-func (k *lambdaKind) invokeAction() kindpkg.Action {
-	return func(app kindpkg.App) error {
-		if k.selected == nil {
-			app.FlashError("no function selected")
-			return nil
-		}
-		out, err := app.APIStore().InvokeFunction(context.Background(), aws.ToString(k.selected.FunctionName), []byte("{}"))
-		if err != nil {
-			app.FlashError(err.Error())
-			return err
-		}
-		body := string(out.Payload)
-		title := " invoke result "
-		if out.FunctionError != nil {
-			title = " invoke result (error) "
-		}
-		tv := tview.NewTextView().SetText(body)
-		tv.SetBorder(true).SetTitle(title)
-		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-		return app.SwitchView(&pseudoKind{name: "invoke:" + aws.ToString(k.selected.FunctionName)}, newTextSubView(app, flex))
-	}
-}
-
 // parseQueueNameFromArn returns the queue name from an SQS ARN like
 // "arn:aws:sqs:us-east-1:111:my-dlq". Returns "" for non-SQS ARNs or
 // malformed input.
@@ -117,61 +65,6 @@ func parseQueueNameFromArn(arn string) string {
 		return ""
 	}
 	return arn[idx+1:]
-}
-
-func (k *lambdaKind) dlqAction() kindpkg.Action {
-	return func(app kindpkg.App) error {
-		if k.selected == nil {
-			app.FlashError("no function selected")
-			return nil
-		}
-		if k.selected.DeadLetterConfig == nil || k.selected.DeadLetterConfig.TargetArn == nil {
-			app.FlashError("no DLQ configured")
-			return nil
-		}
-		queueName := parseQueueNameFromArn(aws.ToString(k.selected.DeadLetterConfig.TargetArn))
-		if queueName == "" {
-			app.FlashError("could not parse DLQ ARN")
-			return nil
-		}
-		sqsK, ok := kindpkg.Get("sqs")
-		if !ok {
-			app.FlashError("sqs kind not registered")
-			return nil
-		}
-		sqsK.SetSelection(queueName)
-		v, err := sqsK.Build(app)
-		if err != nil {
-			app.FlashError(err.Error())
-			return err
-		}
-		return app.SwitchView(sqsK, v)
-	}
-}
-
-func (k *lambdaKind) configAction() kindpkg.Action {
-	return func(app kindpkg.App) error {
-		if k.selected == nil {
-			app.FlashError("no function selected")
-			return nil
-		}
-		out, err := app.APIStore().GetFunction(context.Background(), aws.ToString(k.selected.FunctionName))
-		if err != nil {
-			app.FlashError(err.Error())
-			return err
-		}
-		var body string
-		if data, mErr := json.MarshalIndent(out.Configuration, "", "  "); mErr == nil {
-			body = string(data)
-		} else {
-			app.FlashError("config marshal failed: " + mErr.Error())
-			body = fmt.Sprintf("%+v", out.Configuration)
-		}
-		tv := tview.NewTextView().SetText(body)
-		tv.SetBorder(true).SetTitle(" " + aws.ToString(k.selected.FunctionName) + " config ")
-		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-		return app.SwitchView(&pseudoKind{name: "config:" + aws.ToString(k.selected.FunctionName)}, newTextSubView(app, flex))
-	}
 }
 
 func (k *lambdaKind) Preload(app kindpkg.App) {
@@ -214,131 +107,6 @@ func (k *lambdaKind) loadInventory(app kindpkg.App) error {
 	return err
 }
 
-func (k *lambdaKind) buildLegacyTable() *tview.Table {
-	k.mu.RLock()
-	fns := k.fns
-	k.mu.RUnlock()
-
-	table := tview.NewTable().SetBorders(false)
-	headers := []string{"Name", "Runtime", "Memory", "Timeout", "LastModified", "State"}
-	for col, h := range headers {
-		table.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false))
-	}
-	for row, fn := range fns {
-		copyFn := fn
-		cells := []string{
-			aws.ToString(fn.FunctionName),
-			string(fn.Runtime),
-			fmt.Sprintf("%d", aws.ToInt32(fn.MemorySize)),
-			fmt.Sprintf("%ds", aws.ToInt32(fn.Timeout)),
-			aws.ToString(fn.LastModified),
-			string(fn.State),
-		}
-		for col, c := range cells {
-			cell := tview.NewTableCell(c)
-			if col == 0 {
-				cell.SetReference(&copyFn)
-			}
-			table.SetCell(row+1, col, cell)
-		}
-	}
-	return table
-}
-
-func (k *lambdaKind) Build(app kindpkg.App) (kindpkg.View, error) {
-	k.mu.RLock()
-	loaded := k.loaded
-	k.mu.RUnlock()
-	if loaded {
-		return newTableKindView(app, k, k.buildLegacyTable()), nil
-	}
-	return newLoadingTableKindView(app, k, func() error {
-		return k.loadInventory(app)
-	}, k.buildLegacyTable), nil
-}
-
-// openLogGroupTail opens a read-only log-tail view for the given CloudWatch
-// log group.
-func openLogGroupTail(app kindpkg.App, logGroup string) error {
-	logs, err := app.APIStore().GetLogGroupTail(context.Background(), logGroup, 100)
-	if err != nil {
-		app.FlashError(err.Error())
-		return err
-	}
-	tv := tview.NewTextView().SetDynamicColors(true).SetText(strings.Join(logs, ""))
-	tv.SetBorder(true).SetTitle(" " + logGroup + " ")
-	flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-	return app.SwitchView(&pseudoKind{name: "logs:" + logGroup}, newTextSubView(app, flex))
-}
-
-// AggregateInfo / SelectionDetail satisfy kindpkg.Informer.
-func (k *lambdaKind) AggregateInfo() string {
-	k.mu.RLock()
-	defer k.mu.RUnlock()
-	if len(k.fns) == 0 {
-		return "No functions"
-	}
-	runtimes := map[string]int{}
-	withDLQ := 0
-	for _, fn := range k.fns {
-		runtimes[string(fn.Runtime)]++
-		if fn.DeadLetterConfig != nil && fn.DeadLetterConfig.TargetArn != nil {
-			withDLQ++
-		}
-	}
-	type rc struct {
-		name  string
-		count int
-	}
-	rcs := make([]rc, 0, len(runtimes))
-	for r, c := range runtimes {
-		rcs = append(rcs, rc{r, c})
-	}
-	sort.Slice(rcs, func(i, j int) bool {
-		if rcs[i].count != rcs[j].count {
-			return rcs[i].count > rcs[j].count
-		}
-		return rcs[i].name < rcs[j].name
-	})
-	limit := len(rcs)
-	if limit > 3 {
-		limit = 3
-	}
-	var rtSummary strings.Builder
-	for i := 0; i < limit; i++ {
-		if i > 0 {
-			rtSummary.WriteString(", ")
-		}
-		rtSummary.WriteString(fmt.Sprintf("%s (%d)", rcs[i].name, rcs[i].count))
-	}
-	return fmt.Sprintf(
-		"Functions: %d\nRuntimes: %s\nWith DLQ: %d",
-		len(k.fns), rtSummary.String(), withDLQ,
-	)
-}
-
-func (k *lambdaKind) SelectionDetail() string {
-	if k.selected == nil {
-		return ""
-	}
-	fn := k.selected
-	dlq := "none"
-	if fn.DeadLetterConfig != nil && fn.DeadLetterConfig.TargetArn != nil {
-		dlq = parseQueueNameFromArn(aws.ToString(fn.DeadLetterConfig.TargetArn))
-		if dlq == "" {
-			dlq = aws.ToString(fn.DeadLetterConfig.TargetArn)
-		}
-	}
-	return fmt.Sprintf(
-		"Name: %s\nRuntime: %s\nMemory: %d MB\nTimeout: %ds\nState: %s\nDLQ: %s",
-		aws.ToString(fn.FunctionName),
-		fn.Runtime,
-		aws.ToInt32(fn.MemorySize),
-		aws.ToInt32(fn.Timeout),
-		fn.State,
-		dlq,
-	)
-}
 
 // ---- Legacy-style ECS chrome integration ----
 

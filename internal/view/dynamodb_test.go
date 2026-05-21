@@ -32,28 +32,6 @@ func TestDDBKindResetClearsSelection(t *testing.T) {
 	}
 }
 
-func TestDDBKindBreadcrumb(t *testing.T) {
-	k := &ddbKind{}
-	if got := k.Breadcrumb(); got != "ddb" {
-		t.Fatalf("Breadcrumb (no selection) = %q", got)
-	}
-	k.SetSelection(&ddbTypes.TableDescription{TableName: aws.String("users")})
-	if got := k.Breadcrumb(); got != "ddb > users" {
-		t.Fatalf("Breadcrumb = %q; want %q", got, "ddb > users")
-	}
-}
-
-func TestDDBKindSecondaryActions(t *testing.T) {
-	k := &ddbKind{}
-	got := k.SecondaryActions()
-	if len(got) != 1 {
-		t.Fatalf("len(SecondaryActions) = %d; want 1", len(got))
-	}
-	if got[0].Key != 'c' || got[0].Label != "describe" {
-		t.Fatalf("binding = %+v; want {c, describe}", got[0])
-	}
-}
-
 func TestCollectIndexesBaseFirstThenGSIThenLSI(t *testing.T) {
 	td := &ddbTypes.TableDescription{
 		KeySchema: []ddbTypes.KeySchemaElement{

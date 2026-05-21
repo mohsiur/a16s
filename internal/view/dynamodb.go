@@ -2,14 +2,12 @@ package view
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/gdamore/tcell/v2"
 	"github.com/mohsiur/a16s/internal/color"
 	"github.com/mohsiur/a16s/internal/utils"
 	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
@@ -62,23 +60,6 @@ func (k *ddbKind) Selection() any {
 func (k *ddbKind) SetSelection(s any) {
 	if td, ok := s.(*ddbTypes.TableDescription); ok {
 		k.selected = td
-	}
-}
-
-func (k *ddbKind) Breadcrumb() string {
-	if k.selected == nil || k.selected.TableName == nil {
-		return "ddb"
-	}
-	return "ddb > " + aws.ToString(k.selected.TableName)
-}
-
-func (k *ddbKind) PrimaryAction() kindpkg.Action {
-	return func(app kindpkg.App) error {
-		if k.selected == nil {
-			app.FlashError("no table selected")
-			return nil
-		}
-		return openIndexList(app, k.selected)
 	}
 }
 
@@ -136,135 +117,6 @@ func keyAttr(schema []ddbTypes.KeySchemaElement, kt ddbTypes.KeyType) string {
 	return ""
 }
 
-// openIndexList renders Index | Type | PartitionKey | SortKey for the table's
-// base + GSIs + LSIs. Enter scans the chosen index; `q` queries it.
-func openIndexList(app kindpkg.App, td *ddbTypes.TableDescription) error {
-	tableName := aws.ToString(td.TableName)
-	idxs := collectIndexes(td)
-	table := tview.NewTable().SetBorders(false)
-	headers := []string{"Index", "Type", "PartitionKey", "SortKey"}
-	for col, h := range headers {
-		table.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false).SetTextColor(tcell.ColorYellow))
-	}
-	for r, idx := range idxs {
-		display := idx.name
-		if idx.name == "" {
-			display = "(base table)"
-		}
-		cells := []string{display, idx.kind, idx.partitionKey, idx.sortKey}
-		copyIdx := idx
-		for col, c := range cells {
-			cell := tview.NewTableCell(c)
-			if col == 0 {
-				cell.SetReference(copyIdx)
-			}
-			table.SetCell(r+1, col, cell)
-		}
-	}
-	view := newTableSubView(app, table, "indexes "+tableName, func(row int) {
-		idx, _ := table.GetCell(row, 0).GetReference().(ddbIndex)
-		_ = openScanResults(app, tableName, idx)
-	})
-	view.bindings = []kindpkg.Binding{{Key: 'q', Label: "query", Run: func(app kindpkg.App) error {
-		row, _ := table.GetSelection()
-		if row < 1 {
-			app.FlashError("no index selected")
-			return nil
-		}
-		idx, _ := table.GetCell(row, 0).GetReference().(ddbIndex)
-		return openQueryPrompt(app, tableName, idx)
-	}}}
-	return app.SwitchView(&pseudoKind{name: "indexes:" + tableName}, view)
-}
-
-func openScanResults(app kindpkg.App, tableName string, idx ddbIndex) error {
-	items, err := app.APIStore().ScanIndexFirstPage(context.Background(), tableName, idx.name, 25)
-	if err != nil {
-		app.FlashError(err.Error())
-		return err
-	}
-	title := "scan " + tableName
-	if idx.name != "" {
-		title += " / " + idx.name
-	}
-	view := buildScanResultsView(app, title, items)
-	return app.SwitchView(&pseudoKind{name: "scan:" + tableName + ":" + idx.name}, view)
-}
-
-// openQueryPrompt mounts a one-line input above the empty results area, asking
-// for the partition-key value. Submitting runs QueryEquality and replaces the
-// flex with a results table. Esc returns to the index list.
-func openQueryPrompt(app kindpkg.App, tableName string, idx ddbIndex) error {
-	if idx.partitionKey == "" {
-		app.FlashError("index has no partition key")
-		return nil
-	}
-	flex := tview.NewFlex().SetDirection(tview.FlexRow)
-	prompt := tview.NewInputField().
-		SetLabel(idx.partitionKey + " = ").
-		SetFieldWidth(0)
-	status := tview.NewTextView().SetText("Enter to run, Esc to cancel")
-	flex.AddItem(prompt, 1, 0, true)
-	flex.AddItem(status, 1, 0, false)
-	view := newTextSubView(app, flex)
-	prompt.SetDoneFunc(func(key tcell.Key) {
-		if key != tcell.KeyEnter {
-			return
-		}
-		val := prompt.GetText()
-		items, err := app.APIStore().QueryEquality(context.Background(), tableName, idx.name, idx.partitionKey, val, 25)
-		if err != nil {
-			app.FlashError(err.Error())
-			return
-		}
-		title := fmt.Sprintf("query %s [%s = %q]", tableName, idx.partitionKey, val)
-		if idx.name != "" {
-			title = fmt.Sprintf("query %s/%s [%s = %q]", tableName, idx.name, idx.partitionKey, val)
-		}
-		results := buildScanResultsView(app, title, items)
-		_ = app.SwitchView(&pseudoKind{name: "query:" + tableName + ":" + idx.name}, results)
-	})
-	return app.SwitchView(&pseudoKind{name: "query-prompt:" + tableName + ":" + idx.name}, view)
-}
-
-// buildScanResultsView turns a slice of DynamoDB items into a sortable table
-// sub-view (or a "(no items)" TextView when the result set is empty). Header
-// row + each item row preserve item attributes; missing attributes render as
-// empty cells.
-func buildScanResultsView(app kindpkg.App, title string, items []map[string]ddbTypes.AttributeValue) *simpleKindView {
-	if len(items) == 0 {
-		tv := tview.NewTextView().SetText("(no items)")
-		tv.SetBorder(true).SetTitle(" " + title + " ")
-		return newTextSubView(app, tview.NewFlex().AddItem(tv, 0, 1, true))
-	}
-	attrSet := map[string]struct{}{}
-	for _, it := range items {
-		for k := range it {
-			attrSet[k] = struct{}{}
-		}
-	}
-	attrs := make([]string, 0, len(attrSet))
-	for a := range attrSet {
-		attrs = append(attrs, a)
-	}
-	sort.Strings(attrs)
-
-	scanTable := tview.NewTable().SetBorders(false)
-	for col, h := range attrs {
-		scanTable.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false).SetTextColor(tcell.ColorYellow))
-	}
-	for r, it := range items {
-		for col, attr := range attrs {
-			val := ""
-			if av, ok := it[attr]; ok {
-				val = ddbAttrToString(av)
-			}
-			scanTable.SetCell(r+1, col, tview.NewTableCell(val).SetMaxWidth(40))
-		}
-	}
-	return newTableSubView(app, scanTable, fmt.Sprintf("%s (%d items, first 25)", title, len(items)), nil)
-}
-
 // ddbAttrToString renders a DynamoDB AttributeValue as a short string
 // suitable for a table cell. Maps and lists are summarised by their length —
 // drilling in is a follow-up.
@@ -295,29 +147,6 @@ func ddbAttrToString(av ddbTypes.AttributeValue) string {
 		return fmt.Sprintf("bin(%d B)", len(v.Value))
 	}
 	return ""
-}
-
-func (k *ddbKind) SecondaryActions() []kindpkg.Binding {
-	return []kindpkg.Binding{
-		{Key: 'c', Label: "describe", Run: k.describeAction()},
-	}
-}
-
-func (k *ddbKind) describeAction() kindpkg.Action {
-	return func(app kindpkg.App) error {
-		if k.selected == nil {
-			app.FlashError("no table selected")
-			return nil
-		}
-		body, _ := json.MarshalIndent(k.selected, "", "  ")
-		tv := tview.NewTextView().SetText(string(body))
-		tv.SetBorder(true).SetTitle(" " + aws.ToString(k.selected.TableName) + " describe ")
-		flex := tview.NewFlex().AddItem(tv, 0, 1, true)
-		return app.SwitchView(
-			&pseudoKind{name: "describe:" + aws.ToString(k.selected.TableName)},
-			newTextSubView(app, flex),
-		)
-	}
 }
 
 // Preload satisfies kindpkg.Preloader. Fired in a goroutine on app start so
@@ -389,125 +218,6 @@ func (k *ddbKind) loadInventory(app kindpkg.App) error {
 	k.mu.Unlock()
 	close(done)
 	return err
-}
-
-func (k *ddbKind) buildTable(app kindpkg.App) *tview.Table {
-	k.mu.RLock()
-	names := k.names
-	descs := k.descs
-	errs := k.descErrs
-	k.mu.RUnlock()
-
-	table := tview.NewTable().SetBorders(false)
-	headers := []string{"TableName", "Status", "ItemCount", "SizeBytes", "BillingMode", "Streams"}
-	for col, h := range headers {
-		table.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false).SetTextColor(tcell.ColorYellow))
-	}
-
-	rowOut := 0
-	var lastErr error
-	var lastErrName string
-	for i, name := range names {
-		td := descs[i]
-		if errs[i] != nil || td == nil {
-			lastErr = errs[i]
-			lastErrName = name
-			continue
-		}
-		billing := ""
-		if td.BillingModeSummary != nil {
-			billing = string(td.BillingModeSummary.BillingMode)
-		}
-		streams := "no"
-		if td.StreamSpecification != nil && aws.ToBool(td.StreamSpecification.StreamEnabled) {
-			streams = "yes"
-		}
-		cells := []string{
-			aws.ToString(td.TableName),
-			string(td.TableStatus),
-			fmt.Sprintf("%d", aws.ToInt64(td.ItemCount)),
-			fmt.Sprintf("%d", aws.ToInt64(td.TableSizeBytes)),
-			billing,
-			streams,
-		}
-		copyTD := td
-		for col, c := range cells {
-			cell := tview.NewTableCell(c)
-			if col == 0 {
-				cell.SetReference(copyTD)
-			}
-			table.SetCell(rowOut+1, col, cell)
-		}
-		rowOut++
-	}
-	if lastErr != nil {
-		app.FlashError("describe " + lastErrName + ": " + lastErr.Error())
-	}
-
-	return table
-}
-
-func (k *ddbKind) Build(app kindpkg.App) (kindpkg.View, error) {
-	k.mu.RLock()
-	loaded := k.loaded
-	k.mu.RUnlock()
-	if loaded {
-		return newTableKindView(app, k, k.buildTable(app)), nil
-	}
-	return newLoadingTableKindView(app, k, func() error {
-		return k.loadInventory(app)
-	}, func() *tview.Table { return k.buildTable(app) }), nil
-}
-
-// AggregateInfo / SelectionDetail satisfy kindpkg.Informer.
-func (k *ddbKind) AggregateInfo() string {
-	k.mu.RLock()
-	defer k.mu.RUnlock()
-	successful := 0
-	var totalItems, totalBytes int64
-	streamed := 0
-	for _, td := range k.descs {
-		if td == nil {
-			continue
-		}
-		successful++
-		totalItems += aws.ToInt64(td.ItemCount)
-		totalBytes += aws.ToInt64(td.TableSizeBytes)
-		if td.StreamSpecification != nil && aws.ToBool(td.StreamSpecification.StreamEnabled) {
-			streamed++
-		}
-	}
-	if successful == 0 {
-		return "No tables"
-	}
-	return fmt.Sprintf(
-		"Tables: %d\nTotal items: %d\nTotal size: %s\nWith streams: %d",
-		successful, totalItems, humanBytes(totalBytes), streamed,
-	)
-}
-
-func (k *ddbKind) SelectionDetail() string {
-	if k.selected == nil {
-		return ""
-	}
-	td := k.selected
-	billing := ""
-	if td.BillingModeSummary != nil {
-		billing = string(td.BillingModeSummary.BillingMode)
-	}
-	streams := "no"
-	if td.StreamSpecification != nil && aws.ToBool(td.StreamSpecification.StreamEnabled) {
-		streams = "yes"
-	}
-	return fmt.Sprintf(
-		"Name: %s\nStatus: %s\nItems: %d\nSize: %s\nBilling: %s\nStreams: %s",
-		aws.ToString(td.TableName),
-		td.TableStatus,
-		aws.ToInt64(td.ItemCount),
-		humanBytes(aws.ToInt64(td.TableSizeBytes)),
-		billing,
-		streams,
-	)
 }
 
 func humanBytes(n int64) string {

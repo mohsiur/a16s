@@ -5,7 +5,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/mohsiur/a16s/internal/color"
-	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 	"github.com/rivo/tview"
 )
 
@@ -16,11 +15,10 @@ var paletteExitVerbs = map[string]struct{}{
 	"q":    {},
 }
 
-// paletteLegacyKinds maps palette verbs to legacy `kind` enum values whose
-// pages now go through showPrimaryKindPage (full ECS chrome). Verbs not
-// listed here fall through to the kindpkg Palette flow, preserving any
-// auxiliary kinds we haven't migrated yet.
-var paletteLegacyKinds = map[string]kind{
+// paletteKinds maps palette verbs to `kind` enum values. Every browseable
+// resource lands on its showPrimaryKindPage entry — there's no longer a
+// kindpkg-Palette fallback because all kinds use the legacy ECS chrome.
+var paletteKinds = map[string]kind{
 	"clusters": ClusterKind,
 	"cluster":  ClusterKind,
 	"lambda":   LambdaKind,
@@ -38,9 +36,6 @@ var paletteLegacyKinds = map[string]kind{
 // restore focus to Pages. Tab cycles through registered Kind names that share
 // the typed prefix.
 func (app *App) showPalette() {
-	if app.palette == nil {
-		app.palette = kindpkg.NewPalette(app)
-	}
 	if app.paletteInput != nil {
 		app.SetFocus(app.paletteInput)
 		return
@@ -63,15 +58,7 @@ func (app *App) showPalette() {
 		}
 		seen := map[string]struct{}{}
 		var matches []string
-		for n := range paletteLegacyKinds {
-			if strings.HasPrefix(n, prefix) {
-				if _, dup := seen[n]; !dup {
-					seen[n] = struct{}{}
-					matches = append(matches, n)
-				}
-			}
-		}
-		for _, n := range kindpkg.Names() {
+		for n := range paletteKinds {
 			if strings.HasPrefix(n, prefix) {
 				if _, dup := seen[n]; !dup {
 					seen[n] = struct{}{}
@@ -92,13 +79,13 @@ func (app *App) showPalette() {
 			app.Stop()
 			return
 		}
-		if k, ok := paletteLegacyKinds[strings.ToLower(text)]; ok {
+		if k, ok := paletteKinds[strings.ToLower(text)]; ok {
 			if err := app.showPrimaryKindPage(k, false); err != nil {
 				app.Notice.Warn(err.Error())
 			}
 			return
 		}
-		app.palette.Submit(text)
+		app.Notice.Warn("unknown command: " + text)
 	})
 
 	// Mount as the top item in mainScreen. Use AddItem at index 0 by clearing
