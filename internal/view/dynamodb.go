@@ -18,6 +18,7 @@ import (
 func init() { kindpkg.Register(&ddbKind{}) }
 
 type ddbKind struct {
+	kindpkg.BaseKind
 	selected *ddbTypes.TableDescription
 	// inventory captured during Build / Preload so Informer methods can
 	// compute aggregate + per-row detail without re-querying DynamoDB.
@@ -60,6 +61,36 @@ func (k *ddbKind) Selection() any {
 func (k *ddbKind) SetSelection(s any) {
 	if td, ok := s.(*ddbTypes.TableDescription); ok {
 		k.selected = td
+	}
+}
+
+// BrowserURL returns the AWS console URL for the table under the cursor.
+// All three DDB enum values (DynamoDBKind, DynamoDBIndexKind, DynamoDBScanKind)
+// share this Resource: the legacy switch in openInBrowser already collapsed
+// index/scan pages onto the parent table URL, and the dispatcher keys all
+// three enums onto "ddb" so they answer through this single method.
+// Returns "" when no table is selected.
+func (k *ddbKind) BrowserURL(region string) (string, error) {
+	td := k.selected
+	if td == nil || td.TableName == nil {
+		return "", nil
+	}
+	return utils.DynamoDBTableURL(region, aws.ToString(td.TableName)), nil
+}
+
+// FooterItem describes the ddb kind's footer summary cell.
+func (k *ddbKind) FooterItem() kindpkg.FooterItem {
+	return kindpkg.FooterItem{Label: "tables"}
+}
+
+// Traits flag the affordances DynamoDB opts into. Drillable covers the base
+// table → indexes → scan-items chain.
+func (k *ddbKind) Traits() kindpkg.Traits {
+	return kindpkg.Traits{
+		Filterable:  true,
+		Refreshable: true,
+		Drillable:   true,
+		Browsable:   true,
 	}
 }
 

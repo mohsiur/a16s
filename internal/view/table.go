@@ -553,6 +553,9 @@ func (v *view) changeSelectedValues() {
 		if selected.ddbTable != nil {
 			v.app.ddbTable = selected.ddbTable
 			v.app.entityName = selected.entityName
+			if dk := getDDBKind(); dk != nil {
+				dk.SetSelection(selected.ddbTable)
+			}
 		} else {
 			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
 			return

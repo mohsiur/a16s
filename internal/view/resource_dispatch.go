@@ -7,14 +7,20 @@ import kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 // kindpkg.Resource appear here — call sites use resolveResource to opt into
 // the new path one method at a time, with the enum switches as fallback.
 //
-// Phase 2: Lambda. Phase 3 (this PR) adds SQS — both SQSKind (queue list) and
-// SQSPeekKind (per-queue messages) resolve to the same registered "sqs" kind
-// because they open the same console URL today; the cached selection on
-// sqsKind covers both pages.
+// Phase 2 added Lambda. Phase 3 adds SQS and DynamoDB. SQSKind/SQSPeekKind
+// both resolve to "sqs" and DynamoDBKind/DynamoDBIndexKind/DynamoDBScanKind
+// all resolve to "ddb" because the legacy openInBrowser switch already
+// collapsed those pages onto the parent resource's console URL — sharing
+// one Resource keeps that behavior in a single BrowserURL implementation.
+// Map keys are canonical Name() values; aliases (e.g. "dynamodb" on ddbKind)
+// would confuse kind.All()'s dedupe.
 var resourceRegistryName = map[kind]string{
-	LambdaKind:  "lambda",
-	SQSKind:     "sqs",
-	SQSPeekKind: "sqs",
+	LambdaKind:        "lambda",
+	SQSKind:           "sqs",
+	SQSPeekKind:       "sqs",
+	DynamoDBKind:      "ddb",
+	DynamoDBIndexKind: "ddb",
+	DynamoDBScanKind:  "ddb",
 }
 
 // resolveResource returns the kindpkg.Resource for k, or nil when k has not
