@@ -12,6 +12,7 @@ import (
 // the dispatcher can route through it. Phase 3 PRs add equivalent assertions
 // for sqsKind / ddbKind.
 var _ kindpkg.Resource = (*lambdaKind)(nil)
+var _ kindpkg.Resource = (*sqsKind)(nil)
 
 func TestResolveResource_LambdaMigrated(t *testing.T) {
 	r := resolveResource(LambdaKind)
@@ -20,12 +21,21 @@ func TestResolveResource_LambdaMigrated(t *testing.T) {
 	}
 }
 
-func TestResolveResource_UnmigratedKindReturnsNil(t *testing.T) {
-	if got := resolveResource(SQSKind); got != nil {
-		t.Fatalf("resolveResource(SQSKind) = %T; want nil — SQS migrates in Phase 3", got)
+func TestResolveResource_SQSMigrated(t *testing.T) {
+	if got := resolveResource(SQSKind); got == nil {
+		t.Fatal("resolveResource(SQSKind) = nil; want non-nil — Phase 3 migrated sqs")
 	}
+	if got := resolveResource(SQSPeekKind); got == nil {
+		t.Fatal("resolveResource(SQSPeekKind) = nil; want non-nil — SQSPeek shares sqs kind")
+	}
+}
+
+func TestResolveResource_UnmigratedKindReturnsNil(t *testing.T) {
 	if got := resolveResource(ClusterKind); got != nil {
 		t.Fatalf("resolveResource(ClusterKind) = %T; want nil — ECS chain migrates later", got)
+	}
+	if got := resolveResource(DynamoDBKind); got != nil {
+		t.Fatalf("resolveResource(DynamoDBKind) = %T; want nil — DDB migrates later", got)
 	}
 }
 
@@ -46,6 +56,29 @@ func TestLambdaKind_BrowserURL(t *testing.T) {
 		t.Fatalf("BrowserURL err = %v; want nil", err)
 	}
 	want := "https://us-east-1.console.aws.amazon.com/lambda/home?region=us-east-1#/functions/my-fn"
+	if got != want {
+		t.Errorf("BrowserURL = %q; want %q", got, want)
+	}
+}
+
+func TestSQSKind_BrowserURL(t *testing.T) {
+	sk := getSQSKind()
+	if sk == nil {
+		t.Fatal("getSQSKind() = nil; sqsKind init() should have registered it")
+	}
+	t.Cleanup(sk.Reset)
+
+	if got, _ := sk.BrowserURL("us-east-1"); got != "" {
+		t.Errorf("BrowserURL with no selection = %q; want empty", got)
+	}
+
+	queueURL := "https://sqs.us-east-1.amazonaws.com/111122223333/my-queue"
+	sk.SetSelection(queueURL)
+	got, err := sk.BrowserURL("us-east-1")
+	if err != nil {
+		t.Fatalf("BrowserURL err = %v; want nil", err)
+	}
+	want := "https://us-east-1.console.aws.amazon.com/sqs/v3/home?region=us-east-1#/queues/https%3A%2F%2Fsqs.us-east-1.amazonaws.com%2F111122223333%2Fmy-queue"
 	if got != want {
 		t.Errorf("BrowserURL = %q; want %q", got, want)
 	}

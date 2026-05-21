@@ -19,6 +19,7 @@ import (
 func init() { kindpkg.Register(&sqsKind{}) }
 
 type sqsKind struct {
+	kindpkg.BaseKind
 	// selectedURL is set in two ways:
 	//   1. Row-change in Build's table fires SetSelection(fullURL).
 	//   2. Cross-kind nav from Lambda DLQ calls SetSelection(bareQueueName).
@@ -58,6 +59,34 @@ func (k *sqsKind) Selection() any { return k.selectedURL }
 func (k *sqsKind) SetSelection(s any) {
 	if str, ok := s.(string); ok {
 		k.selectedURL = str
+	}
+}
+
+// BrowserURL returns the AWS console URL for the queue under the cursor. Both
+// SQSKind (queue list) and SQSPeekKind (per-queue messages page) route here
+// because they open the same console URL today; resource_dispatch.go maps both
+// enum values to "sqs". Returns "" when no queue is selected so openInBrowser
+// falls through to its legacy switch.
+func (k *sqsKind) BrowserURL(region string) (string, error) {
+	if k.selectedURL == "" {
+		return "", nil
+	}
+	return utils.SQSQueueURL(region, k.selectedURL), nil
+}
+
+// FooterItem describes the sqs kind's footer summary cell.
+func (k *sqsKind) FooterItem() kindpkg.FooterItem {
+	return kindpkg.FooterItem{Label: "queues"}
+}
+
+// Traits flag the affordances SQS opts into. Drillable covers Enter→messages
+// (SQSPeekKind) and Browsable covers `o`→AWS console.
+func (k *sqsKind) Traits() kindpkg.Traits {
+	return kindpkg.Traits{
+		Filterable:  true,
+		Refreshable: true,
+		Drillable:   true,
+		Browsable:   true,
 	}
 }
 

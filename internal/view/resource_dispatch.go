@@ -7,9 +7,14 @@ import kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 // kindpkg.Resource appear here — call sites use resolveResource to opt into
 // the new path one method at a time, with the enum switches as fallback.
 //
-// Phase 2: Lambda only. SQS, DDB, ECS chain join in Phase 3.
+// Phase 2: Lambda. Phase 3 (this PR) adds SQS — both SQSKind (queue list) and
+// SQSPeekKind (per-queue messages) resolve to the same registered "sqs" kind
+// because they open the same console URL today; the cached selection on
+// sqsKind covers both pages.
 var resourceRegistryName = map[kind]string{
-	LambdaKind: "lambda",
+	LambdaKind:  "lambda",
+	SQSKind:     "sqs",
+	SQSPeekKind: "sqs",
 }
 
 // resolveResource returns the kindpkg.Resource for k, or nil when k has not
