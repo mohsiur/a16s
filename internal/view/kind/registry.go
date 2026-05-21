@@ -8,7 +8,6 @@ package kind
 import (
 	"sort"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/mohsiur/a16s/internal/api"
 	"github.com/rivo/tview"
 )
@@ -19,84 +18,23 @@ import (
 // this interface.
 type App interface {
 	APIStore() *api.Store
-	SwitchView(k Kind, v View) error
 	FlashError(msg string)
-	// Back removes the current front kind page (if any) so the previously
-	// visible page is re-shown. Used by Esc on a flat-kind view.
-	Back()
 	// QueueUpdateDraw queues f on the tview event loop and forces a redraw
-	// after it returns. Required by Kinds that Build asynchronously (return
-	// a loading placeholder immediately, then swap in real content once the
-	// background fetch resolves).
+	// after it returns. Used by background loaders that need to update UI.
 	QueueUpdateDraw(f func()) *tview.Application
-	// SetFocus moves keyboard focus to p. Required when an async Build
-	// swaps the loading placeholder for the real table — without an
-	// explicit refocus, the Application stays focused on the (now-removed)
-	// placeholder and arrow keys never reach the table.
+	// SetFocus moves keyboard focus to p. Used by background loaders when
+	// the placeholder primitive that originally held focus is removed.
 	SetFocus(p tview.Primitive) *tview.Application
 }
 
-// View is what a Kind's Build returns. Intentionally minimal so flat kinds
-// don't have to inherit ECS's `view` struct.
-type View interface {
-	Render() *tview.Flex
-	Focus()
-	OnKey(event *tcell.EventKey) (handled bool)
-}
-
-// Action is the function shape returned by PrimaryAction / Binding.Run.
-type Action func(app App) error
-
-// Binding is a letter-key secondary action displayed in the footer keymap.
-type Binding struct {
-	Key   rune
-	Label string
-	Run   Action
-}
-
-// Kind is the interface every browseable resource implements.
+// Kind is the interface every browseable resource implements. The kind layer
+// owns the inventory cache (Reset / Selection / SetSelection); rendering and
+// keybindings are wired in the legacy `view` package.
 type Kind interface {
 	Name() string
-
-	// Build constructs the kind's view. May be called multiple times across
-	// a session (every `:` invocation rebuilds). Implementations should be
-	// cheap to call or cache internally.
-	Build(app App) (View, error)
 	Reset()
-
 	Selection() any
 	SetSelection(any)
-
-	Breadcrumb() string
-
-	PrimaryAction() Action
-	SecondaryActions() []Binding
-}
-
-// Informer is an optional companion interface a Kind can implement to
-// surface aggregate context (independent of the cursor) and selected-row
-// detail (recomputed as the cursor moves). When a Kind implements Informer,
-// newTableKindView renders a two-column header pane above the table —
-// matching ECS's familiar layout. Kinds that don't implement Informer get
-// just the bare table.
-type Informer interface {
-	// AggregateInfo returns the left-column text — counts, totals, account
-	// summary. Called once per Build (immediately after the API list
-	// resolves).
-	AggregateInfo() string
-	// SelectionDetail returns the right-column text for the row currently
-	// selected. Called whenever the selection changes; safe to return ""
-	// when no row is highlighted.
-	SelectionDetail() string
-}
-
-// Preloader is an optional companion interface a Kind can implement so its
-// inventory is fetched in the background as soon as the AWS config is ready
-// — instead of on the first `:<kind>` invocation. Implementations should be
-// idempotent and safe to call concurrently with Build (Build wins on the
-// foreground; Preload populates caches the kind itself owns).
-type Preloader interface {
-	Preload(app App)
 }
 
 // Aliaser is an optional companion interface a Kind can implement to expose
@@ -105,6 +43,13 @@ type Preloader interface {
 // palette autocomplete cycles through them.
 type Aliaser interface {
 	Aliases() []string
+}
+
+// Preloader is an optional companion interface a Kind can implement to fetch
+// inventory in the background at app start. PreloadAll runs each Preload in
+// its own goroutine.
+type Preloader interface {
+	Preload(app App)
 }
 
 // PreloadAll fans out Preload across every registered Kind that opts in.
