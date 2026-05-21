@@ -421,6 +421,8 @@ type sqsView struct {
 func newSQSView(urls []string, attrsByURL map[string]map[string]string, app *App) *sqsView {
 	keys := append(basicKeyInputs, []keyDescriptionPair{
 		hotKeyMap["enter"],
+		hotKeyMap["sqsP"],
+		hotKeyMap["sqsS"],
 	}...)
 	return &sqsView{
 		view: *newView(app, keys, secondaryPageKeyMap{
