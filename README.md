@@ -6,9 +6,6 @@ A terminal UI for browsing AWS — ECS, Lambda, SQS, and DynamoDB — in one [k9
 
 > **Status:** active development. ECS parity with upstream is preserved; Lambda, SQS, and DynamoDB are usable but not yet feature-complete. Expect breaking changes until the first tagged release.
 
-![palette demo placeholder](docs/img/palette.gif)
-<!-- TODO: record a 10-second asciinema of `:` → lambda → b (open in browser). Save to docs/img/palette.gif. -->
-
 ## Why a16s
 
 - **One TUI for the most-used AWS services.** ECS, Lambda, SQS, and DynamoDB without flipping browser tabs.
@@ -150,8 +147,6 @@ Supported actions on ECS resources include:
 - `b` — open the function in the AWS console.
 - `d` — describe (full configuration JSON).
 
-<!-- TODO: docs/img/lambda.png -->
-
 ### SQS
 
 `:sqs` lists queues with message counts, in-flight, delay, and DLQ flag.
@@ -162,8 +157,6 @@ Supported actions on ECS resources include:
 - `b` — open the queue in the AWS console.
 - `d` — describe (URL + queue attributes).
 
-<!-- TODO: docs/img/sqs.png -->
-
 ### DynamoDB
 
 `:ddb` lists tables. Drill in to view indexes, then scan items.
@@ -172,8 +165,6 @@ Supported actions on ECS resources include:
 - Index → items — first column is the partition key, second is the sort key (when present), then the rest alphabetically.
 - `q` on an index — query (form-based).
 - `b` — open the table in the AWS console (works on table, index, and item views).
-
-<!-- TODO: docs/img/ddb.png -->
 
 ### Navigation, filter, sort
 
