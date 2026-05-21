@@ -10,7 +10,10 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	sqsTypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/gdamore/tcell/v2"
 	"github.com/mohsiur/a16s/internal/api"
 	"github.com/mohsiur/a16s/internal/color"
@@ -41,6 +44,13 @@ type Entity struct {
 	profile           string
 	region            *api.Region
 	entityName        string
+	// Flat-kind selection state. Set by changeSelectedValues for the
+	// corresponding kind so drill-downs can read it without re-listing.
+	lambdaFunction *lambdaTypes.FunctionConfiguration
+	sqsQueueName   string
+	sqsMessage     *sqsTypes.Message
+	ddbTable       *ddbTypes.TableDescription
+	ddbIndex       *ddbIndex
 }
 
 type Option struct {
@@ -292,6 +302,16 @@ func (app *App) getPageHandle() string {
 		name = *app.service.ServiceArn
 	case ContainerKind:
 		name = *app.task.TaskArn
+	case SQSPeekKind:
+		name = app.Entity.sqsQueueName
+	case DynamoDBIndexKind:
+		if app.Entity.ddbTable != nil {
+			name = aws.ToString(app.Entity.ddbTable.TableName)
+		}
+	case DynamoDBScanKind:
+		if app.Entity.ddbTable != nil && app.Entity.ddbIndex != nil {
+			name = aws.ToString(app.Entity.ddbTable.TableName) + "." + app.Entity.ddbIndex.name
+		}
 	}
 	// based on different task status different name
 	if app.kind == TaskKind {
@@ -363,6 +383,18 @@ func (app *App) showPrimaryKindPage(k kind, reload bool) error {
 		err = app.showTaskDefinitionPage(reload)
 	case ServiceDeploymentKind:
 		err = app.showServiceDeploymentPage(reload)
+	case LambdaKind:
+		err = app.showLambdasPage(reload)
+	case SQSKind:
+		err = app.showQueuesPage(reload)
+	case SQSPeekKind:
+		err = app.showQueueMessagesPage(reload)
+	case DynamoDBKind:
+		err = app.showTablesPage(reload)
+	case DynamoDBIndexKind:
+		err = app.showTableIndexesPage(reload)
+	case DynamoDBScanKind:
+		err = app.showIndexItemsPage(reload)
 	default:
 		app.kind = ClusterKind
 		err = app.showClustersPage(reload)

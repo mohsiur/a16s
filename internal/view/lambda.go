@@ -10,21 +10,20 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
-	"github.com/gdamore/tcell/v2"
+	"github.com/mohsiur/a16s/internal/color"
+	"github.com/mohsiur/a16s/internal/utils"
 	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 	"github.com/rivo/tview"
 )
 
+// lambdaKind is retained as the cross-process inventory cache + secondary
+// action source. It still implements kindpkg.Kind so tests and the existing
+// kindpkg layer keep compiling, but the palette now dispatches through
+// showLambdasPage instead of going through kindpkg.Build.
 func init() { kindpkg.Register(&lambdaKind{}) }
 
 type lambdaKind struct {
 	selected *lambdaTypes.FunctionConfiguration
-	// inventory captured during Build / Preload so Informer methods can
-	// compute aggregate + per-row detail without re-listing functions.
-	// `loadDone` is the single-flight latch: nil before the first load, set
-	// to a fresh channel when a load starts, closed when it finishes. This
-	// guarantees concurrent Preload + Build only fetch once and the second
-	// caller waits.
 	mu       sync.RWMutex
 	fns      []lambdaTypes.FunctionConfiguration
 	loaded   bool
@@ -89,8 +88,6 @@ func (k *lambdaKind) invokeAction() kindpkg.Action {
 			app.FlashError("no function selected")
 			return nil
 		}
-		// MVP: empty payload — invoke as-is, show response. A modal input is a
-		// follow-up.
 		out, err := app.APIStore().InvokeFunction(context.Background(), aws.ToString(k.selected.FunctionName), []byte("{}"))
 		if err != nil {
 			app.FlashError(err.Error())
@@ -163,8 +160,6 @@ func (k *lambdaKind) configAction() kindpkg.Action {
 			app.FlashError(err.Error())
 			return err
 		}
-		// Render the full config as JSON; fall back to %+v if marshalling fails
-		// (e.g. an unexpected non-marshalable field).
 		var body string
 		if data, mErr := json.MarshalIndent(out.Configuration, "", "  "); mErr == nil {
 			body = string(data)
@@ -179,18 +174,12 @@ func (k *lambdaKind) configAction() kindpkg.Action {
 	}
 }
 
-// Preload satisfies kindpkg.Preloader. Fired in a goroutine on app start so
-// the first `:lambda` is instant. Safe to call concurrently with Build —
-// loadInventory uses RWMutex.
 func (k *lambdaKind) Preload(app kindpkg.App) {
 	_ = k.loadInventory(app)
 }
 
 // loadInventory fetches the function list once and caches the result.
-// Concurrent callers single-flight on k.loadDone — the first caller runs
-// the fetch and closes the channel; subsequent callers (including Preload
-// + a fast `:lambda`) block on the channel and read the shared result.
-// After Reset() the cycle restarts.
+// Concurrent callers single-flight on k.loadDone.
 func (k *lambdaKind) loadInventory(app kindpkg.App) error {
 	k.mu.Lock()
 	if k.loaded {
@@ -218,8 +207,6 @@ func (k *lambdaKind) loadInventory(app kindpkg.App) error {
 		k.fns = fns
 		k.loaded = true
 	} else {
-		// Reset loadDone on error so a future call can retry; closing the
-		// channel below still wakes anyone currently waiting.
 		k.loadDone = nil
 	}
 	k.mu.Unlock()
@@ -227,7 +214,7 @@ func (k *lambdaKind) loadInventory(app kindpkg.App) error {
 	return err
 }
 
-func (k *lambdaKind) buildTable() *tview.Table {
+func (k *lambdaKind) buildLegacyTable() *tview.Table {
 	k.mu.RLock()
 	fns := k.fns
 	k.mu.RUnlock()
@@ -235,7 +222,7 @@ func (k *lambdaKind) buildTable() *tview.Table {
 	table := tview.NewTable().SetBorders(false)
 	headers := []string{"Name", "Runtime", "Memory", "Timeout", "LastModified", "State"}
 	for col, h := range headers {
-		table.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false).SetTextColor(tcell.ColorYellow))
+		table.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false))
 	}
 	for row, fn := range fns {
 		copyFn := fn
@@ -263,25 +250,21 @@ func (k *lambdaKind) Build(app kindpkg.App) (kindpkg.View, error) {
 	loaded := k.loaded
 	k.mu.RUnlock()
 	if loaded {
-		return newTableKindView(app, k, k.buildTable()), nil
+		return newTableKindView(app, k, k.buildLegacyTable()), nil
 	}
 	return newLoadingTableKindView(app, k, func() error {
 		return k.loadInventory(app)
-	}, k.buildTable), nil
+	}, k.buildLegacyTable), nil
 }
 
 // openLogGroupTail opens a read-only log-tail view for the given CloudWatch
-// log group. Reuses GetServiceLogs-style flow but for a single named group.
+// log group.
 func openLogGroupTail(app kindpkg.App, logGroup string) error {
-	// MVP: fetch latest 100 events synchronously, render in a TextView. A
-	// follow-up can swap in true tail-by-polling.
 	logs, err := app.APIStore().GetLogGroupTail(context.Background(), logGroup, 100)
 	if err != nil {
 		app.FlashError(err.Error())
 		return err
 	}
-	// Each log line already has a trailing \n via api.logFmt, so strings.Join
-	// with an empty separator is the right concatenation.
 	tv := tview.NewTextView().SetDynamicColors(true).SetText(strings.Join(logs, ""))
 	tv.SetBorder(true).SetTitle(" " + logGroup + " ")
 	flex := tview.NewFlex().AddItem(tv, 0, 1, true)
@@ -303,7 +286,6 @@ func (k *lambdaKind) AggregateInfo() string {
 			withDLQ++
 		}
 	}
-	// Top 3 runtimes by count, alphabetised within ties for determinism.
 	type rc struct {
 		name  string
 		count int
@@ -357,3 +339,152 @@ func (k *lambdaKind) SelectionDetail() string {
 		dlq,
 	)
 }
+
+// ---- Legacy-style ECS chrome integration ----
+
+// lambdaView wraps the lambdaKind cache as a resourceViewBuilder so the page
+// uses the same buildHeaderFlex + buildTable + footer chrome as ClusterKind.
+type lambdaView struct {
+	view
+	fns []lambdaTypes.FunctionConfiguration
+}
+
+func newLambdaView(fns []lambdaTypes.FunctionConfiguration, app *App) *lambdaView {
+	keys := append(basicKeyInputs, []keyDescriptionPair{
+		hotKeyMap["L"],
+	}...)
+	return &lambdaView{
+		view: *newView(app, keys, secondaryPageKeyMap{
+			DescriptionKind: describePageKeys,
+		}),
+		fns: fns,
+	}
+}
+
+// showLambdasPage is the LambdaKind entry point reachable from
+// showPrimaryKindPage. It uses the legacy buildResourcePage flow so chrome
+// matches ECS pages exactly.
+func (app *App) showLambdasPage(reload bool) error {
+	app.kind = LambdaKind
+	if switched := app.switchPage(reload); switched {
+		return nil
+	}
+	// Reuse lambdaKind's cache when available so first paint after a `:lambda`
+	// is instant. Otherwise list synchronously — buildResourcePage assumes the
+	// data is already in hand.
+	lk := getLambdaKind()
+	if lk != nil {
+		if err := lk.loadInventory(app); err != nil {
+			return err
+		}
+		lk.mu.RLock()
+		fns := append([]lambdaTypes.FunctionConfiguration(nil), lk.fns...)
+		lk.mu.RUnlock()
+		return buildResourcePage(fns, app, nil, func() resourceViewBuilder {
+			return newLambdaView(fns, app)
+		})
+	}
+	fns, err := app.Store.ListFunctions(context.Background())
+	return buildResourcePage(fns, app, err, func() resourceViewBuilder {
+		return newLambdaView(fns, app)
+	})
+}
+
+// getLambdaKind retrieves the registered lambdaKind cache. Returns nil if the
+// kind isn't in the registry (shouldn't happen given init() above, but the
+// fallback keeps the page resilient to registry changes).
+func getLambdaKind() *lambdaKind {
+	k, ok := kindpkg.Get("lambda")
+	if !ok {
+		return nil
+	}
+	lk, _ := k.(*lambdaKind)
+	return lk
+}
+
+func (v *lambdaView) getViewAndFooter() (*view, *tview.TextView) {
+	return &v.view, v.footer.lambda
+}
+
+func (v *lambdaView) headerParamsBuilder() []headerPageParam {
+	params := make([]headerPageParam, 0, len(v.fns))
+	for i, fn := range v.fns {
+		params = append(params, headerPageParam{
+			title:      aws.ToString(fn.FunctionName),
+			entityName: aws.ToString(fn.FunctionArn),
+			items:      v.headerPageItems(i),
+		})
+	}
+	return params
+}
+
+func (v *lambdaView) headerPageItems(index int) []headerItem {
+	fn := v.fns[index]
+	dlq := "none"
+	if fn.DeadLetterConfig != nil && fn.DeadLetterConfig.TargetArn != nil {
+		name := parseQueueNameFromArn(aws.ToString(fn.DeadLetterConfig.TargetArn))
+		if name == "" {
+			dlq = aws.ToString(fn.DeadLetterConfig.TargetArn)
+		} else {
+			dlq = name
+		}
+	}
+	return []headerItem{
+		{name: "Name", value: aws.ToString(fn.FunctionName)},
+		{name: "Runtime", value: string(fn.Runtime)},
+		{name: "Memory", value: fmt.Sprintf("%d MB", aws.ToInt32(fn.MemorySize))},
+		{name: "Timeout", value: fmt.Sprintf("%ds", aws.ToInt32(fn.Timeout))},
+		{name: "State", value: string(fn.State)},
+		{name: "Last modified", value: aws.ToString(fn.LastModified)},
+		{name: "Handler", value: aws.ToString(fn.Handler)},
+		{name: "Role", value: aws.ToString(fn.Role)},
+		{name: "DLQ", value: dlq},
+		{name: "Architecture", value: archList(fn.Architectures)},
+	}
+}
+
+func archList(arches []lambdaTypes.Architecture) string {
+	if len(arches) == 0 {
+		return utils.EmptyText
+	}
+	out := make([]string, 0, len(arches))
+	for _, a := range arches {
+		out = append(out, string(a))
+	}
+	return strings.Join(out, ",")
+}
+
+func (v *lambdaView) tableParamsBuilder() (title string, headers []string, rowsBuilder func() [][]string) {
+	title = fmt.Sprintf(color.TableTitleFmt, v.app.kind, "all", len(v.fns))
+	headers = []string{
+		"Name",
+		"Runtime",
+		"Memory",
+		"Timeout",
+		"State",
+		"LastModified",
+	}
+	rowsBuilder = func() (data [][]string) {
+		for _, fn := range v.fns {
+			row := []string{
+				aws.ToString(fn.FunctionName),
+				string(fn.Runtime),
+				fmt.Sprintf("%d", aws.ToInt32(fn.MemorySize)),
+				fmt.Sprintf("%ds", aws.ToInt32(fn.Timeout)),
+				utils.ShowGreenGrey(stringPtr(string(fn.State)), "Active"),
+				aws.ToString(fn.LastModified),
+			}
+			data = append(data, row)
+			copyFn := fn
+			entity := Entity{
+				lambdaFunction: &copyFn,
+				entityName:     aws.ToString(fn.FunctionArn),
+			}
+			v.originalRowReferences = append(v.originalRowReferences, entity)
+		}
+		return data
+	}
+	return
+}
+
+func stringPtr(s string) *string { return &s }

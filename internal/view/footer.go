@@ -21,6 +21,12 @@ type footer struct {
 	taskDefinition    *tview.TextView
 	serviceDeployment *tview.TextView
 	help              *tview.TextView
+	lambda            *tview.TextView
+	sqs               *tview.TextView
+	sqsPeek           *tview.TextView
+	dynamodb          *tview.TextView
+	ddbIndex          *tview.TextView
+	ddbScan           *tview.TextView
 }
 
 func newFooter() *footer {
@@ -38,6 +44,12 @@ func newFooter() *footer {
 		taskDefinition:    tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, TaskDefinitionKind)).SetTextAlign(L),
 		serviceDeployment: tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, ServiceDeploymentKind)).SetTextAlign(L),
 		help:              tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, HelpKind)).SetTextAlign(L),
+		lambda:            tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, LambdaKind)).SetTextAlign(L),
+		sqs:               tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, SQSKind)).SetTextAlign(L),
+		sqsPeek:           tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, SQSPeekKind)).SetTextAlign(L),
+		dynamodb:          tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, DynamoDBKind)).SetTextAlign(L),
+		ddbIndex:          tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, DynamoDBIndexKind)).SetTextAlign(L),
+		ddbScan:           tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, DynamoDBScanKind)).SetTextAlign(L),
 	}
 }
 func (v *view) addFooterItems() {
@@ -72,6 +84,30 @@ func (v *view) addFooterItems() {
 		v.footer.footerFlex.
 			AddItem(tview.NewTextView(), 5, 0, false).
 			AddItem(v.footer.region, 0, 1, false)
+	} else if v.app.kind == LambdaKind {
+		v.footer.footerFlex.
+			AddItem(tview.NewTextView(), 5, 0, false).
+			AddItem(v.footer.lambda, 0, 1, false)
+	} else if v.app.kind == SQSKind {
+		v.footer.footerFlex.
+			AddItem(tview.NewTextView(), 5, 0, false).
+			AddItem(v.footer.sqs, 0, 1, false)
+	} else if v.app.kind == SQSPeekKind {
+		v.footer.footerFlex.
+			AddItem(tview.NewTextView(), 5, 0, false).
+			AddItem(v.footer.sqsPeek, 0, 1, false)
+	} else if v.app.kind == DynamoDBKind {
+		v.footer.footerFlex.
+			AddItem(tview.NewTextView(), 5, 0, false).
+			AddItem(v.footer.dynamodb, 0, 1, false)
+	} else if v.app.kind == DynamoDBIndexKind {
+		v.footer.footerFlex.
+			AddItem(tview.NewTextView(), 5, 0, false).
+			AddItem(v.footer.ddbIndex, 0, 1, false)
+	} else if v.app.kind == DynamoDBScanKind {
+		v.footer.footerFlex.
+			AddItem(tview.NewTextView(), 5, 0, false).
+			AddItem(v.footer.ddbScan, 0, 1, false)
 	} else {
 		v.footer.footerFlex.
 			AddItem(tview.NewTextView(), 0, 1, false)

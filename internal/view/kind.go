@@ -20,6 +20,15 @@ const (
 	EmptyKind
 	ProfileKind
 	RegionKind
+	LambdaKind
+	SQSKind
+	SQSPeekKind
+	DynamoDBKind
+	DynamoDBIndexKind
+	DynamoDBScanKind
+	LambdaInvokeKind
+	LambdaConfigKind
+	LambdaLogTailKind
 )
 
 func (k kind) String() string {
@@ -56,6 +65,24 @@ func (k kind) String() string {
 		return "profiles"
 	case RegionKind:
 		return "regions"
+	case LambdaKind:
+		return "lambdas"
+	case SQSKind:
+		return "queues"
+	case SQSPeekKind:
+		return "messages"
+	case DynamoDBKind:
+		return "tables"
+	case DynamoDBIndexKind:
+		return "indexes"
+	case DynamoDBScanKind:
+		return "items"
+	case LambdaInvokeKind:
+		return "invoke"
+	case LambdaConfigKind:
+		return "config"
+	case LambdaLogTailKind:
+		return "log tail"
 	default:
 		return "unknownKind"
 	}
@@ -90,6 +117,14 @@ func (k kind) prevKind() kind {
 		return ServiceKind
 	case ContainerKind:
 		return TaskKind
+	case LambdaKind, SQSKind, DynamoDBKind:
+		return ClusterKind
+	case SQSPeekKind:
+		return SQSKind
+	case DynamoDBIndexKind:
+		return DynamoDBKind
+	case DynamoDBScanKind:
+		return DynamoDBIndexKind
 	default:
 		return ClusterKind
 	}
@@ -101,9 +136,9 @@ func (k kind) getAppPageName(name string) string {
 	switch k {
 	case ProfileKind, RegionKind:
 		return k.String()
-	case ClusterKind:
+	case ClusterKind, LambdaKind, SQSKind, DynamoDBKind:
 		return prefix + "." + k.String()
-	case ServiceKind, TaskKind, ContainerKind, TaskDefinitionKind, ServiceDeploymentKind, DescriptionKind, InstanceKind:
+	case ServiceKind, TaskKind, ContainerKind, TaskDefinitionKind, ServiceDeploymentKind, DescriptionKind, InstanceKind, SQSPeekKind, DynamoDBIndexKind, DynamoDBScanKind:
 		return prefix + "." + k.String() + "." + name
 	default:
 		return prefix + "." + k.String()
