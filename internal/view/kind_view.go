@@ -440,8 +440,11 @@ func populateTableKindView(root *tview.Flex, app kindpkg.App, source kindpkg.Kin
 	informer, hasInfo := source.(kindpkg.Informer)
 	var detailView *tview.TextView
 	if hasInfo {
+		// Breadcrumb lives in the persistent top bar now; the aggregate
+		// pane just labels itself "summary" so the row stays visually
+		// anchored even though the bar carries the kind context.
 		aggView := tview.NewTextView().SetDynamicColors(true).SetText(informer.AggregateInfo())
-		aggView.SetBorder(true).SetTitle(" " + source.Breadcrumb() + " ")
+		aggView.SetBorder(true).SetTitle(" summary ")
 		detailView = tview.NewTextView().SetDynamicColors(true).SetText(informer.SelectionDetail())
 		detailView.SetBorder(true).SetTitle(" selection ")
 		header := tview.NewFlex().

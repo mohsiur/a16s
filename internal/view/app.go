@@ -78,6 +78,10 @@ type App struct {
 	Notice *ui.Notice
 	// mainScreen content UI
 	mainScreen *tview.Flex
+	// topBar is the always-visible chrome row above Pages. It carries the
+	// `profile · region · breadcrumb` context line and morphs into the `:`
+	// palette input while the user is typing a command.
+	topBar *topBarWidget
 	// API client
 	*api.Store
 	// Option from cli args
@@ -129,7 +133,9 @@ func newApp(option Option) (*App, error) {
 
 	notice := ui.NewNotice(app, theme)
 	footer.AddItem(notice, 0, 1, false)
+	topBar := newTopBarWidget()
 	main := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(topBar.flex, 1, 0, false).
 		AddItem(pages, 0, 2, true).
 		AddItem(footer, 1, 1, false)
 
@@ -138,6 +144,7 @@ func newApp(option Option) (*App, error) {
 		Pages:         pages,
 		Notice:        notice,
 		mainScreen:    main,
+		topBar:        topBar,
 		Store:         store,
 		Option:        option,
 		kind:          ClusterKind,
@@ -183,6 +190,7 @@ func Start(option Option) error {
 		if !strings.HasPrefix(name, "kind.") {
 			app.activeKind = nil
 		}
+		app.refreshTopBar()
 	})
 
 	app.SetInputCapture(app.globalInputHandle)
@@ -378,6 +386,22 @@ func (app *App) showPrimaryKindPage(k kind, reload bool) error {
 		slog.Debug("Reload in showPrimaryKindPage")
 	}
 	return nil
+}
+
+// refreshTopBar updates the persistent top-bar context line. Called on every
+// page change so the breadcrumb tracks the front page; safe to call before
+// the bar is initialised (no-op).
+func (app *App) refreshTopBar() {
+	if app.topBar == nil {
+		return
+	}
+	crumb := ""
+	if app.activeKind != nil {
+		crumb = app.activeKind.Breadcrumb()
+	} else if app.kind != EmptyKind {
+		crumb = app.kind.String()
+	}
+	app.topBar.SetContext(globalProfile, globalRegion, crumb)
 }
 
 // app close hook
