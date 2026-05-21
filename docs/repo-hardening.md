@@ -6,11 +6,11 @@ A practical lockdown for `mohsiur/a16s`. Each step lists the goal, the `gh` CLI 
 
 ## 1. Lock the default branch
 
-Goal: prevent accidental force-push, deletion, or unreviewed commits to `master`.
+Goal: prevent accidental force-push, deletion, or unreviewed commits to `main`.
 
 ```bash
-# Branch protection on master via REST API
-gh api -X PUT repos/mohsiur/a16s/branches/master/protection \
+# Branch protection on main via REST API
+gh api -X PUT repos/mohsiur/a16s/branches/main/protection \
   --input - <<'JSON'
 {
   "required_status_checks": {
@@ -36,18 +36,18 @@ JSON
 Why each setting:
 
 - `required_status_checks` — every PR must pass the `Test` workflow before merging. The context name must match the job's `name:` field in `.github/workflows/test.yml` (currently `Test`).
-- `strict: true` — branch must be up-to-date with master before merging. Avoids semantic merge conflicts where two PRs are fine alone but break together.
+- `strict: true` — branch must be up-to-date with main before merging. Avoids semantic merge conflicts where two PRs are fine alone but break together.
 - `enforce_admins: false` — you can still bypass in an emergency. Set to `true` once you have a co-maintainer.
 - `required_approving_review_count: 0` — solo project, so reviews aren't required. Bump to `1` when you add collaborators.
 - `dismiss_stale_reviews: true` — re-approval needed if anything changes after approval.
-- `required_linear_history: true` — no merge commits on master. Keeps `git log` readable. Use squash or rebase merges.
-- `allow_force_pushes: false`, `allow_deletions: false` — master is not rewritable.
+- `required_linear_history: true` — no merge commits on main. Keeps `git log` readable. Use squash or rebase merges.
+- `allow_force_pushes: false`, `allow_deletions: false` — main is not rewritable.
 - `required_conversation_resolution: true` — open PR comments must be resolved before merge.
 
 Verify:
 
 ```bash
-gh api repos/mohsiur/a16s/branches/master/protection | jq '.required_pull_request_reviews, .allow_force_pushes, .required_linear_history'
+gh api repos/mohsiur/a16s/branches/main/protection | jq '.required_pull_request_reviews, .allow_force_pushes, .required_linear_history'
 ```
 
 ## 2. Default merge strategy
@@ -178,10 +178,10 @@ git config --global commit.gpgsign true
 git config --global tag.gpgsign true
 ```
 
-Then enforce signed commits on master:
+Then enforce signed commits on main:
 
 ```bash
-gh api -X POST repos/mohsiur/a16s/branches/master/protection/required_signatures
+gh api -X POST repos/mohsiur/a16s/branches/main/protection/required_signatures
 ```
 
 Solo-project caveat: if you ever push from a machine without your signing key, this blocks you. Defer until you've got the keychain set up everywhere.
@@ -243,8 +243,8 @@ git commit -am 'test: protection dry-run'
 git push -u origin test/protection-check
 
 # attempt the things you want blocked
-git push --force-with-lease origin test/protection-check  # should succeed (not master)
-gh pr create --base master --title 'test' --body 'test'    # PR opens
+git push --force-with-lease origin test/protection-check  # should succeed (not main)
+gh pr create --base main --title 'test' --body 'test'    # PR opens
 # In the PR UI: confirm that "Test" status check is required and the merge button is disabled until green.
 
 # clean up
@@ -257,7 +257,7 @@ git branch -D test/protection-check
 Each step is reversible. Branch protection:
 
 ```bash
-gh api -X DELETE repos/mohsiur/a16s/branches/master/protection
+gh api -X DELETE repos/mohsiur/a16s/branches/main/protection
 ```
 
 Workflow permissions back to write:
