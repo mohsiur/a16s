@@ -1,6 +1,7 @@
 package view
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -123,6 +124,12 @@ type App struct {
 	bootstrapServices []types.Service
 	// Set when splash bootstrap fails before Run() returns; read after Run().
 	splashStartupErr error
+	// ctx is cancelled in onClose() to stop background goroutines (notably the
+	// auto-refresh ticker) when the tview application has stopped. Without
+	// this the ticker goroutine would outlive Run() and race with shutdown
+	// when calling QueueUpdateDraw.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func newApp(option Option) (*App, error) {
@@ -146,6 +153,8 @@ func newApp(option Option) (*App, error) {
 		AddItem(pages, 0, 2, true).
 		AddItem(footer, 1, 1, false)
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &App{
 		Application:      app,
 		Pages:            pages,
@@ -158,6 +167,8 @@ func newApp(option Option) (*App, error) {
 		secondaryKind: EmptyKind,
 		backKind:      EmptyKind,
 		taskStatus:    types.DesiredStatusRunning,
+		ctx:           ctx,
+		cancel:        cancel,
 		Entity: Entity{
 			cluster: &types.Cluster{
 				ClusterName: aws.String("a16s_default_cluster"),
@@ -332,10 +343,16 @@ func (app *App) start() error {
 	if app.Option.Refresh > 0 {
 		slog.Debug("Auto refresh rate", "seconds", app.Option.Refresh)
 		ticker := time.NewTicker(time.Duration(app.Option.Refresh) * time.Second)
+		ctx := app.ctx
 
 		go func() {
+			defer ticker.Stop()
 			for {
-				<-ticker.C
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
 				if app.secondaryKind != EmptyKind || app.isSuspended {
 					continue
 				}
@@ -455,6 +472,14 @@ func (app *App) showPrimaryKindPage(k kind, reload bool) error {
 
 // app close hook
 func (app *App) onClose() {
+	// Cancel the app context so background goroutines (notably the
+	// auto-refresh ticker) exit before the tview application is fully torn
+	// down. Run() has already returned by the time onClose is called, so any
+	// further QueueUpdateDraw from a leaked ticker would race with shutdown.
+	if app.cancel != nil {
+		app.cancel()
+	}
+
 	if len(app.sessions) != 0 {
 		ids := []*string{}
 		for _, s := range app.sessions {
