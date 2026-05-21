@@ -1,0 +1,52 @@
+# golangci-lint config — conservative baseline.
+#
+# Linters intentionally NOT enabled yet:
+#   - exhaustive: would flag the kind enum switches that the in-flight
+#     scalability refactor plans to remove. Re-enable after the enum is gone.
+#   - errcheck: ~30 hits in the current tree, mostly defer Close()s and
+#     fire-and-forget Stdout.Write banners. Slated for a follow-up cleanup PR.
+#   - goconst: ~50 hits, almost all in test fixtures (region strings etc.).
+#     Slated for a follow-up cleanup PR.
+#   - revive / gosec / gocritic / gocognit: future tightening pass.
+#
+# Quick-fix style suggestions (staticcheck QFxxxx) are excluded — they're
+# autofix candidates we can land in a sweep after the refactor lands.
+#
+# Run locally with: docker run --rm -v "$(pwd):/app" -w /app \
+#   golangci/golangci-lint:latest golangci-lint run
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - misspell
+    - unconvert
+  settings:
+    staticcheck:
+      checks:
+        - all
+        # Stylistic QF (quick-fix) suggestions: defer to a follow-up sweep.
+        - -QF1003 # could use tagged switch
+        - -QF1007 # could merge conditional assignment into declaration
+        - -QF1008 # could remove embedded field from selector
+        - -QF1012 # use fmt.Fprintf instead of Write([]byte(fmt.Sprintf(...)))
+        # Stylistic ST checks: cosmetic naming/comments. Enable in a
+        # dedicated cleanup PR; doing them now would balloon the diff.
+        - -ST1000 # at least one file in a package should have a package comment
+        - -ST1003 # initialism casing (sessionId -> sessionID etc.)
+        - -ST1020 # comment on exported function should start with the name
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - bodyclose

@@ -86,7 +86,7 @@ func ShowGreenGrey(inputStr *string, greenStr string) string {
 	if str == "" {
 		return EmptyText
 	}
-	outputStr := strings.ToUpper(string(str[0])) + strings.ToLower(string(str[1:]))
+	outputStr := strings.ToUpper(string(str[0])) + strings.ToLower(str[1:])
 	if strings.ToLower(str) == greenStr {
 		return fmt.Sprintf(color.GreenFmt, outputStr)
 	}
@@ -370,8 +370,7 @@ func ImageInfo(imageURL *string) (string, string) {
 	defaultRegistry := "Docker Hub"
 
 	// Extract the domain and path from the image URL
-	domain := url
-	path := ""
+	var domain, path string
 	if strings.Contains(url, "/") {
 		parts := strings.SplitN(url, "/", 2)
 		domain = parts[0]
