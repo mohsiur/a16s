@@ -518,6 +518,9 @@ func (v *view) changeSelectedValues() {
 		if fn != nil {
 			v.app.lambdaFunction = fn
 			v.app.entityName = selected.entityName
+			if lk := getLambdaKind(); lk != nil {
+				lk.SetSelection(fn)
+			}
 		} else {
 			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
 			return
@@ -575,6 +578,18 @@ func (v *view) openInBrowser() {
 	taskService := ""
 	url := ""
 	region := v.app.effectiveRegion()
+	// Migrated kinds answer BrowserURL via kindpkg.Resource. When the migrated
+	// path returns a URL we skip the legacy switch entirely; otherwise the
+	// switch below is the fallback for kinds still on the enum (Phase 3+).
+	if r := resolveResource(v.app.kind); r != nil {
+		if u, _ := r.BrowserURL(region); u != "" {
+			slog.Info("open", "url", u, "via", "kind.Resource")
+			if err := utils.OpenURL(u); err != nil {
+				v.app.Notice.Warnf("failed to open url %s\n", u)
+			}
+			return
+		}
+	}
 	switch v.app.kind {
 	case ClusterKind:
 		arn = *selected.cluster.ClusterArn

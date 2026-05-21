@@ -20,6 +20,7 @@ import (
 func init() { kindpkg.Register(&lambdaKind{}) }
 
 type lambdaKind struct {
+	kindpkg.BaseKind
 	selected *lambdaTypes.FunctionConfiguration
 	mu       sync.RWMutex
 	fns      []lambdaTypes.FunctionConfiguration
@@ -50,6 +51,32 @@ func (k *lambdaKind) Selection() any {
 func (k *lambdaKind) SetSelection(s any) {
 	if fn, ok := s.(*lambdaTypes.FunctionConfiguration); ok {
 		k.selected = fn
+	}
+}
+
+// BrowserURL returns the AWS console URL for the function under the cursor.
+// The selection passed in is the row reference picked up by openInBrowser;
+// it falls back to k.selected when nil so this also works for callers that
+// route through the cached selection.
+func (k *lambdaKind) BrowserURL(region string) (string, error) {
+	fn := k.selected
+	if fn == nil || fn.FunctionName == nil {
+		return "", nil
+	}
+	return utils.LambdaFunctionURL(region, aws.ToString(fn.FunctionName)), nil
+}
+
+// FooterItem describes the lambda kind's footer summary cell.
+func (k *lambdaKind) FooterItem() kindpkg.FooterItem {
+	return kindpkg.FooterItem{Label: "lambdas"}
+}
+
+// Traits flag the affordances Lambda opts into.
+func (k *lambdaKind) Traits() kindpkg.Traits {
+	return kindpkg.Traits{
+		Filterable:  true,
+		Refreshable: true,
+		Browsable:   true,
 	}
 }
 
