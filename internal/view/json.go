@@ -251,6 +251,15 @@ func (v *view) getJsonString(entity Entity) (string, []byte, error) {
 		data = entity.container
 	case entity.taskDefinition != nil && v.app.kind == TaskDefinitionKind:
 		data = entity.taskDefinition
+	case entity.lambdaFunction != nil && v.app.kind == LambdaKind:
+		data = entity.lambdaFunction
+	case entity.ddbTable != nil && v.app.kind == DynamoDBKind:
+		data = entity.ddbTable
+	case entity.sqsMessage != nil && v.app.kind == SQSPeekKind:
+		data = entity.sqsMessage
+	case entity.sqsQueueName != "" && v.app.kind == SQSKind:
+		// SQS describe = the cached attribute map for the selected queue.
+		data = sqsDescribeData(v, entity)
 	case entity.metrics != nil:
 		data = entity.metrics
 	case entity.autoScaling != nil:
