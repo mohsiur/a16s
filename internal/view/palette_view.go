@@ -4,7 +4,9 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/mohsiur/a16s/internal/color"
 	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
+	"github.com/rivo/tview"
 )
 
 // reserved palette verbs that don't map to a Kind.
@@ -14,19 +16,31 @@ var paletteExitVerbs = map[string]struct{}{
 	"q":    {},
 }
 
-// showPalette swaps the persistent top bar from its context label into a `:`
-// InputField. The current page stays visible behind it — k9s-style. On Enter
-// the typed name is dispatched through the palette; Escape cancels. Either
-// path swaps the bar back to the label and restores focus.
-//
-// Tab cycles through registered kind names (canonical + aliases) that share
-// the typed prefix — e.g. `:c<Tab>` cycles cluster, container.
+// showPalette mounts a `:` InputField as a 1-row item at the top of mainScreen
+// (above Pages, below where a top bar would be). Enter dispatches the typed
+// name through the palette; Esc cancels. Both paths remove the input row and
+// restore focus to Pages. Tab cycles through registered Kind names that share
+// the typed prefix.
 func (app *App) showPalette() {
 	if app.palette == nil {
 		app.palette = kindpkg.NewPalette(app)
 	}
+	if app.paletteInput != nil {
+		app.SetFocus(app.paletteInput)
+		return
+	}
 
-	autocomplete := func(currentText string) []string {
+	input := tview.NewInputField().
+		SetLabel("[gray]:[-] ").
+		SetLabelColor(color.Color(theme.Cyan)).
+		SetFieldWidth(0)
+	input.SetBackgroundColor(color.Color(theme.BgColor))
+	input.SetFieldBackgroundColor(color.Color(theme.BgColor))
+	input.SetFieldTextColor(color.Color(theme.FgColor))
+	input.SetBorder(true).SetBorderColor(color.Color(theme.Blue))
+	input.SetBorderPadding(0, 0, 1, 0)
+
+	input.SetAutocompleteFunc(func(currentText string) []string {
 		prefix := strings.ToLower(strings.TrimSpace(currentText))
 		if prefix == "" {
 			return nil
@@ -38,18 +52,47 @@ func (app *App) showPalette() {
 			}
 		}
 		return matches
-	}
+	})
 
-	input := app.topBar.EnterPalette(autocomplete, func(name string, key tcell.Key) {
-		app.SetFocus(app.Pages)
+	input.SetDoneFunc(func(key tcell.Key) {
+		text := strings.TrimSpace(input.GetText())
+		app.dismissPalette()
 		if key != tcell.KeyEnter {
 			return
 		}
-		if _, isExit := paletteExitVerbs[name]; isExit {
+		if _, isExit := paletteExitVerbs[text]; isExit {
 			app.Stop()
 			return
 		}
-		app.palette.Submit(name)
+		app.palette.Submit(text)
 	})
+
+	// Mount as the top item in mainScreen. Use AddItem at index 0 by clearing
+	// and re-adding — tview.Flex doesn't expose insert.
+	app.paletteInput = input
+	app.rebuildMainScreen()
 	app.SetFocus(input)
+}
+
+// dismissPalette removes the `:` input row and refocuses Pages.
+func (app *App) dismissPalette() {
+	if app.paletteInput == nil {
+		return
+	}
+	app.paletteInput = nil
+	app.rebuildMainScreen()
+	app.SetFocus(app.Pages)
+}
+
+// rebuildMainScreen re-lays mainScreen's children: optional palette input on
+// top, then Pages, then the footer. Called whenever the palette mounts or
+// dismisses; cheap because tview just re-attaches the same primitives.
+func (app *App) rebuildMainScreen() {
+	app.mainScreen.Clear()
+	app.mainScreen.SetDirection(tview.FlexRow)
+	if app.paletteInput != nil {
+		app.mainScreen.AddItem(app.paletteInput, 3, 0, true)
+	}
+	app.mainScreen.AddItem(app.Pages, 0, 2, true)
+	app.mainScreen.AddItem(app.mainScreenFooter, 1, 1, false)
 }
