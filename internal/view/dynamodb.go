@@ -682,6 +682,7 @@ type ddbIndexView struct {
 func newDDBIndexView(tableName string, indexes []ddbIndex, app *App) *ddbIndexView {
 	keys := append(basicKeyInputs, []keyDescriptionPair{
 		hotKeyMap["enter"],
+		hotKeyMap["q"],
 	}...)
 	return &ddbIndexView{
 		view: *newView(app, keys, secondaryPageKeyMap{

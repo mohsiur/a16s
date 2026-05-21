@@ -53,6 +53,10 @@ var hotKeyMap = map[string]keyDescriptionPair{
 	"d":     {key: "d", description: "Describe"},
 	"e":     {key: "e", description: "Open in default editor"},
 
+	"i":       {key: "i", description: "Invoke function with empty payload"},
+	"q":       {key: "q", description: "Query index by partition key"},
+	"sqsP":    {key: "p", description: "Purge selected queue"},
+	"sqsS":    {key: "s", description: "Send test message to queue"},
 	"j":       {key: "j, down arrow", description: "Down"},
 	"k":       {key: "k, up arrow", description: "Up"},
 	"G":       {key: "shift-g, end", description: "Go to bottom"},

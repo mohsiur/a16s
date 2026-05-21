@@ -190,6 +190,20 @@ func (v *view) handleSelected(row, column int) {
 	if v.app.kind == ContainerKind {
 		v.execShell()
 	}
+	if v.app.kind == LambdaKind {
+		// Lambda has no drill-down child; Enter opens the function's log tail.
+		v.openLambdaLogs()
+		return
+	}
+	if v.app.kind == SQSPeekKind {
+		// SQS messages: Enter opens the message body in a read-only view.
+		v.openSQSMessageBody()
+		return
+	}
+	if v.app.kind == DynamoDBScanKind {
+		// Scan items are leaf rows; Enter is a no-op until a future drill-in.
+		return
+	}
 	v.app.rowIndex = 0
 	v.app.showPrimaryKindPage(v.app.kind.nextKind(), false)
 }
@@ -217,6 +231,20 @@ func (v *view) handleInputCapture(event *tcell.EventKey) *tcell.EventKey {
 			v.showSecondaryKindPage(false)
 			return event
 		}
+		if v.app.kind == LambdaKind {
+			v.openLambdaLogs()
+			return event
+		}
+	case 'i':
+		if v.app.kind == LambdaKind {
+			v.invokeLambda()
+			return event
+		}
+	case 'q':
+		if v.app.kind == DynamoDBIndexKind {
+			v.queryDDBIndex()
+			return event
+		}
 	case 'm':
 		if v.app.kind == ServiceKind {
 			v.app.secondaryKind = ModalKind
@@ -231,6 +259,10 @@ func (v *view) handleInputCapture(event *tcell.EventKey) *tcell.EventKey {
 	case 'p':
 		if v.app.kind == ServiceKind {
 			v.showKindPage(ServiceDeploymentKind, false)
+			return event
+		}
+		if v.app.kind == SQSKind {
+			v.purgeSelectedQueue()
 			return event
 		}
 	case 'v':
@@ -265,6 +297,10 @@ func (v *view) handleInputCapture(event *tcell.EventKey) *tcell.EventKey {
 		}
 		if v.app.kind == InstanceKind || v.app.kind == TaskKind {
 			v.instanceStartSession()
+		}
+		if v.app.kind == SQSKind {
+			v.sendTestMessageToQueue()
+			return event
 		}
 		return event
 	case 'S':
@@ -327,6 +363,10 @@ func (v *view) handleInputCapture(event *tcell.EventKey) *tcell.EventKey {
 			return event
 		}
 	case 'D':
+		if v.app.kind == LambdaKind {
+			v.openLambdaDLQ()
+			return event
+		}
 		v.app.secondaryKind = ModalKind
 		v.showFormModal(v.catFile, 10)
 		return event

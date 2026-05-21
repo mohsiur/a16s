@@ -98,6 +98,12 @@ func (k kind) nextKind() kind {
 		return ContainerKind
 	case ContainerKind:
 		return ContainerKind
+	case SQSKind:
+		return SQSPeekKind
+	case DynamoDBKind:
+		return DynamoDBIndexKind
+	case DynamoDBIndexKind:
+		return DynamoDBScanKind
 	default:
 		return ClusterKind
 	}

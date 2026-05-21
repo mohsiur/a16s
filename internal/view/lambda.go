@@ -352,6 +352,8 @@ type lambdaView struct {
 func newLambdaView(fns []lambdaTypes.FunctionConfiguration, app *App) *lambdaView {
 	keys := append(basicKeyInputs, []keyDescriptionPair{
 		hotKeyMap["L"],
+		hotKeyMap["i"],
+		hotKeyMap["D"],
 	}...)
 	return &lambdaView{
 		view: *newView(app, keys, secondaryPageKeyMap{
