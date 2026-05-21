@@ -542,6 +542,29 @@ func orEmpty(s string) string {
 	return s
 }
 
+// sqsDescribeData returns a JSON-serialisable view of the selected queue:
+// its URL plus whatever attributes the cache has for it. Used by the legacy
+// `d` describe action so SQS describe lands in the same chrome as ECS
+// describe.
+func sqsDescribeData(v *view, entity Entity) any {
+	out := struct {
+		URL        string            `json:"url"`
+		Name       string            `json:"name"`
+		Attributes map[string]string `json:"attributes,omitempty"`
+	}{
+		URL:  entity.sqsQueueName,
+		Name: queueNameFromURL(entity.sqsQueueName),
+	}
+	if sk := getSQSKind(); sk != nil {
+		sk.mu.RLock()
+		if a, ok := sk.attrsByURL[entity.sqsQueueName]; ok {
+			out.Attributes = a
+		}
+		sk.mu.RUnlock()
+	}
+	return out
+}
+
 // ---- SQS Peek (messages) ----
 
 type sqsPeekView struct {
