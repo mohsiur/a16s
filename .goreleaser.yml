@@ -18,6 +18,7 @@ builds:
 
 release:
   prerelease: auto
+  mode: append
 
 changelog:
   sort: asc
