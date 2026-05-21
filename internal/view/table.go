@@ -482,6 +482,49 @@ func (v *view) changeSelectedValues() {
 			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
 			return
 		}
+	case LambdaKind:
+		fn := selected.lambdaFunction
+		if fn != nil {
+			v.app.lambdaFunction = fn
+			v.app.entityName = selected.entityName
+		} else {
+			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
+			return
+		}
+	case SQSKind:
+		if selected.sqsQueueName != "" {
+			v.app.sqsQueueName = selected.sqsQueueName
+			v.app.entityName = selected.entityName
+		} else {
+			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
+			return
+		}
+	case SQSPeekKind:
+		if selected.sqsMessage != nil {
+			v.app.sqsMessage = selected.sqsMessage
+			v.app.entityName = selected.entityName
+		} else {
+			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
+			return
+		}
+	case DynamoDBKind:
+		if selected.ddbTable != nil {
+			v.app.ddbTable = selected.ddbTable
+			v.app.entityName = selected.entityName
+		} else {
+			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
+			return
+		}
+	case DynamoDBIndexKind:
+		if selected.ddbIndex != nil {
+			v.app.ddbIndex = selected.ddbIndex
+			v.app.entityName = selected.entityName
+		} else {
+			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
+			return
+		}
+	case DynamoDBScanKind:
+		v.app.entityName = selected.entityName
 	default:
 		v.app.back()
 	}

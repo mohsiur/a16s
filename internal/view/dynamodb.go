@@ -10,6 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/gdamore/tcell/v2"
+	"github.com/mohsiur/a16s/internal/color"
+	"github.com/mohsiur/a16s/internal/utils"
 	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 	"github.com/rivo/tview"
 	"golang.org/x/sync/errgroup"
@@ -519,4 +521,383 @@ func humanBytes(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// ---- Legacy-style ECS chrome integration ----
+
+type ddbView struct {
+	view
+	tables []*ddbTypes.TableDescription
+}
+
+func newDDBView(tables []*ddbTypes.TableDescription, app *App) *ddbView {
+	keys := append(basicKeyInputs, []keyDescriptionPair{
+		hotKeyMap["enter"],
+	}...)
+	return &ddbView{
+		view: *newView(app, keys, secondaryPageKeyMap{
+			DescriptionKind: describePageKeys,
+		}),
+		tables: tables,
+	}
+}
+
+func (app *App) showTablesPage(reload bool) error {
+	app.kind = DynamoDBKind
+	if switched := app.switchPage(reload); switched {
+		return nil
+	}
+	dk := getDDBKind()
+	if dk != nil {
+		if err := dk.loadInventory(app); err != nil {
+			return err
+		}
+		dk.mu.RLock()
+		tables := make([]*ddbTypes.TableDescription, 0, len(dk.descs))
+		for _, td := range dk.descs {
+			if td != nil {
+				tables = append(tables, td)
+			}
+		}
+		dk.mu.RUnlock()
+		return buildResourcePage(tables, app, nil, func() resourceViewBuilder {
+			return newDDBView(tables, app)
+		})
+	}
+	names, err := app.Store.ListTables(context.Background())
+	if err != nil {
+		return buildResourcePage([]*ddbTypes.TableDescription(nil), app, err, func() resourceViewBuilder {
+			return newDDBView(nil, app)
+		})
+	}
+	tables := make([]*ddbTypes.TableDescription, 0, len(names))
+	for _, n := range names {
+		td, derr := app.Store.DescribeTable(context.Background(), n)
+		if derr != nil || td == nil {
+			continue
+		}
+		tables = append(tables, td)
+	}
+	return buildResourcePage(tables, app, nil, func() resourceViewBuilder {
+		return newDDBView(tables, app)
+	})
+}
+
+func getDDBKind() *ddbKind {
+	k, ok := kindpkg.Get("ddb")
+	if !ok {
+		return nil
+	}
+	dk, _ := k.(*ddbKind)
+	return dk
+}
+
+func (v *ddbView) getViewAndFooter() (*view, *tview.TextView) {
+	return &v.view, v.footer.dynamodb
+}
+
+func (v *ddbView) headerParamsBuilder() []headerPageParam {
+	params := make([]headerPageParam, 0, len(v.tables))
+	for i, td := range v.tables {
+		params = append(params, headerPageParam{
+			title:      aws.ToString(td.TableName),
+			entityName: aws.ToString(td.TableName),
+			items:      v.headerPageItems(i),
+		})
+	}
+	return params
+}
+
+func (v *ddbView) headerPageItems(index int) []headerItem {
+	td := v.tables[index]
+	billing := utils.EmptyText
+	if td.BillingModeSummary != nil {
+		billing = string(td.BillingModeSummary.BillingMode)
+	}
+	streams := "no"
+	if td.StreamSpecification != nil && aws.ToBool(td.StreamSpecification.StreamEnabled) {
+		streams = "yes"
+	}
+	pk := keyAttr(td.KeySchema, ddbTypes.KeyTypeHash)
+	sk := keyAttr(td.KeySchema, ddbTypes.KeyTypeRange)
+	if sk == "" {
+		sk = utils.EmptyText
+	}
+	return []headerItem{
+		{name: "Name", value: aws.ToString(td.TableName)},
+		{name: "Status", value: string(td.TableStatus)},
+		{name: "Items", value: fmt.Sprintf("%d", aws.ToInt64(td.ItemCount))},
+		{name: "Size", value: humanBytes(aws.ToInt64(td.TableSizeBytes))},
+		{name: "Billing", value: billing},
+		{name: "Streams", value: streams},
+		{name: "PartitionKey", value: pk},
+		{name: "SortKey", value: sk},
+		{name: "GSIs", value: fmt.Sprintf("%d", len(td.GlobalSecondaryIndexes))},
+		{name: "LSIs", value: fmt.Sprintf("%d", len(td.LocalSecondaryIndexes))},
+	}
+}
+
+func (v *ddbView) tableParamsBuilder() (title string, headers []string, rowsBuilder func() [][]string) {
+	title = fmt.Sprintf(color.TableTitleFmt, v.app.kind, "all", len(v.tables))
+	headers = []string{"TableName", "Status", "ItemCount", "SizeBytes", "BillingMode", "Streams"}
+	rowsBuilder = func() (data [][]string) {
+		for _, td := range v.tables {
+			copyTD := td
+			billing := ""
+			if td.BillingModeSummary != nil {
+				billing = string(td.BillingModeSummary.BillingMode)
+			}
+			streams := "no"
+			if td.StreamSpecification != nil && aws.ToBool(td.StreamSpecification.StreamEnabled) {
+				streams = "yes"
+			}
+			row := []string{
+				aws.ToString(td.TableName),
+				string(td.TableStatus),
+				fmt.Sprintf("%d", aws.ToInt64(td.ItemCount)),
+				fmt.Sprintf("%d", aws.ToInt64(td.TableSizeBytes)),
+				billing,
+				streams,
+			}
+			data = append(data, row)
+			entity := Entity{
+				ddbTable:   copyTD,
+				entityName: aws.ToString(td.TableName),
+			}
+			v.originalRowReferences = append(v.originalRowReferences, entity)
+		}
+		return data
+	}
+	return
+}
+
+// ---- DDB Indexes (per table) ----
+
+type ddbIndexView struct {
+	view
+	tableName string
+	indexes   []ddbIndex
+}
+
+func newDDBIndexView(tableName string, indexes []ddbIndex, app *App) *ddbIndexView {
+	keys := append(basicKeyInputs, []keyDescriptionPair{
+		hotKeyMap["enter"],
+	}...)
+	return &ddbIndexView{
+		view: *newView(app, keys, secondaryPageKeyMap{
+			DescriptionKind: describePageKeys,
+		}),
+		tableName: tableName,
+		indexes:   indexes,
+	}
+}
+
+func (app *App) showTableIndexesPage(reload bool) error {
+	app.kind = DynamoDBIndexKind
+	if app.ddbTable == nil {
+		app.Notice.Warn("no table selected")
+		app.back()
+		return nil
+	}
+	if switched := app.switchPage(reload); switched {
+		return nil
+	}
+	tableName := aws.ToString(app.ddbTable.TableName)
+	indexes := collectIndexes(app.ddbTable)
+	return buildResourcePage(indexes, app, nil, func() resourceViewBuilder {
+		return newDDBIndexView(tableName, indexes, app)
+	})
+}
+
+func (v *ddbIndexView) getViewAndFooter() (*view, *tview.TextView) {
+	return &v.view, v.footer.ddbIndex
+}
+
+func (v *ddbIndexView) headerParamsBuilder() []headerPageParam {
+	params := make([]headerPageParam, 0, len(v.indexes))
+	for i, idx := range v.indexes {
+		display := idx.name
+		if display == "" {
+			display = "(base table)"
+		}
+		params = append(params, headerPageParam{
+			title:      v.tableName + " > " + display,
+			entityName: v.tableName + "." + idx.name,
+			items:      v.headerPageItems(i),
+		})
+	}
+	return params
+}
+
+func (v *ddbIndexView) headerPageItems(index int) []headerItem {
+	idx := v.indexes[index]
+	display := idx.name
+	if display == "" {
+		display = "(base table)"
+	}
+	sk := idx.sortKey
+	if sk == "" {
+		sk = utils.EmptyText
+	}
+	return []headerItem{
+		{name: "Table", value: v.tableName},
+		{name: "Index", value: display},
+		{name: "Type", value: idx.kind},
+		{name: "PartitionKey", value: idx.partitionKey},
+		{name: "SortKey", value: sk},
+	}
+}
+
+func (v *ddbIndexView) tableParamsBuilder() (title string, headers []string, rowsBuilder func() [][]string) {
+	title = fmt.Sprintf(color.TableTitleFmt, v.app.kind, v.tableName, len(v.indexes))
+	headers = []string{"Index", "Type", "PartitionKey", "SortKey"}
+	rowsBuilder = func() (data [][]string) {
+		for _, idx := range v.indexes {
+			copyIdx := idx
+			display := idx.name
+			if display == "" {
+				display = "(base table)"
+			}
+			sk := idx.sortKey
+			if sk == "" {
+				sk = utils.EmptyText
+			}
+			row := []string{display, idx.kind, idx.partitionKey, sk}
+			data = append(data, row)
+			entity := Entity{
+				ddbIndex:   &copyIdx,
+				entityName: v.tableName + "." + idx.name,
+			}
+			v.originalRowReferences = append(v.originalRowReferences, entity)
+		}
+		return data
+	}
+	return
+}
+
+// ---- DDB Scan items (per index) ----
+
+type ddbScanView struct {
+	view
+	tableName string
+	indexName string
+	items     []map[string]ddbTypes.AttributeValue
+	attrs     []string
+}
+
+func newDDBScanView(tableName, indexName string, items []map[string]ddbTypes.AttributeValue, app *App) *ddbScanView {
+	keys := append(basicKeyInputs, []keyDescriptionPair{
+		hotKeyMap["enter"],
+	}...)
+	attrSet := map[string]struct{}{}
+	for _, it := range items {
+		for k := range it {
+			attrSet[k] = struct{}{}
+		}
+	}
+	attrs := make([]string, 0, len(attrSet))
+	for a := range attrSet {
+		attrs = append(attrs, a)
+	}
+	sort.Strings(attrs)
+	return &ddbScanView{
+		view: *newView(app, keys, secondaryPageKeyMap{
+			DescriptionKind: describePageKeys,
+		}),
+		tableName: tableName,
+		indexName: indexName,
+		items:     items,
+		attrs:     attrs,
+	}
+}
+
+func (app *App) showIndexItemsPage(reload bool) error {
+	app.kind = DynamoDBScanKind
+	if app.ddbTable == nil || app.ddbIndex == nil {
+		app.Notice.Warn("no index selected")
+		app.back()
+		return nil
+	}
+	if switched := app.switchPage(reload); switched {
+		return nil
+	}
+	tableName := aws.ToString(app.ddbTable.TableName)
+	indexName := app.ddbIndex.name
+	items, err := app.Store.ScanIndexFirstPage(context.Background(), tableName, indexName, 25)
+	return buildResourcePage(items, app, err, func() resourceViewBuilder {
+		return newDDBScanView(tableName, indexName, items, app)
+	})
+}
+
+func (v *ddbScanView) getViewAndFooter() (*view, *tview.TextView) {
+	return &v.view, v.footer.ddbScan
+}
+
+func (v *ddbScanView) headerParamsBuilder() []headerPageParam {
+	params := make([]headerPageParam, 0, len(v.items))
+	for i := range v.items {
+		entity := fmt.Sprintf("%s.%s.%d", v.tableName, v.indexName, i)
+		title := v.tableName
+		if v.indexName != "" {
+			title += " / " + v.indexName
+		}
+		params = append(params, headerPageParam{
+			title:      title,
+			entityName: entity,
+			items:      v.headerPageItems(i),
+		})
+	}
+	return params
+}
+
+func (v *ddbScanView) headerPageItems(index int) []headerItem {
+	it := v.items[index]
+	items := []headerItem{
+		{name: "Table", value: v.tableName},
+		{name: "Index", value: indexLabel(v.indexName)},
+		{name: "Attributes", value: fmt.Sprintf("%d", len(it))},
+	}
+	limit := len(v.attrs)
+	if limit > 9 {
+		limit = 9
+	}
+	for i := 0; i < limit; i++ {
+		attr := v.attrs[i]
+		val := utils.EmptyText
+		if av, ok := it[attr]; ok {
+			val = ddbAttrToString(av)
+		}
+		items = append(items, headerItem{name: attr, value: val})
+	}
+	return items
+}
+
+func indexLabel(name string) string {
+	if name == "" {
+		return "(base table)"
+	}
+	return name
+}
+
+func (v *ddbScanView) tableParamsBuilder() (title string, headers []string, rowsBuilder func() [][]string) {
+	title = fmt.Sprintf(color.TableTitleFmt, v.app.kind, v.tableName+"."+v.indexName, len(v.items))
+	headers = make([]string, len(v.attrs))
+	copy(headers, v.attrs)
+	rowsBuilder = func() (data [][]string) {
+		for i, it := range v.items {
+			row := make([]string, len(v.attrs))
+			for col, attr := range v.attrs {
+				if av, ok := it[attr]; ok {
+					row[col] = ddbAttrToString(av)
+				}
+			}
+			data = append(data, row)
+			entity := Entity{
+				entityName: fmt.Sprintf("%s.%s.%d", v.tableName, v.indexName, i),
+			}
+			v.originalRowReferences = append(v.originalRowReferences, entity)
+		}
+		return data
+	}
+	return
 }

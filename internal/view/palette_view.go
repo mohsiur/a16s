@@ -16,6 +16,22 @@ var paletteExitVerbs = map[string]struct{}{
 	"q":    {},
 }
 
+// paletteLegacyKinds maps palette verbs to legacy `kind` enum values whose
+// pages now go through showPrimaryKindPage (full ECS chrome). Verbs not
+// listed here fall through to the kindpkg Palette flow, preserving any
+// auxiliary kinds we haven't migrated yet.
+var paletteLegacyKinds = map[string]kind{
+	"clusters": ClusterKind,
+	"cluster":  ClusterKind,
+	"lambda":   LambdaKind,
+	"lambdas":  LambdaKind,
+	"sqs":      SQSKind,
+	"queues":   SQSKind,
+	"ddb":      DynamoDBKind,
+	"dynamodb": DynamoDBKind,
+	"tables":   DynamoDBKind,
+}
+
 // showPalette mounts a `:` InputField as a 1-row item at the top of mainScreen
 // (above Pages, below where a top bar would be). Enter dispatches the typed
 // name through the palette; Esc cancels. Both paths remove the input row and
@@ -45,10 +61,22 @@ func (app *App) showPalette() {
 		if prefix == "" {
 			return nil
 		}
+		seen := map[string]struct{}{}
 		var matches []string
+		for n := range paletteLegacyKinds {
+			if strings.HasPrefix(n, prefix) {
+				if _, dup := seen[n]; !dup {
+					seen[n] = struct{}{}
+					matches = append(matches, n)
+				}
+			}
+		}
 		for _, n := range kindpkg.Names() {
 			if strings.HasPrefix(n, prefix) {
-				matches = append(matches, n)
+				if _, dup := seen[n]; !dup {
+					seen[n] = struct{}{}
+					matches = append(matches, n)
+				}
 			}
 		}
 		return matches
@@ -62,6 +90,12 @@ func (app *App) showPalette() {
 		}
 		if _, isExit := paletteExitVerbs[text]; isExit {
 			app.Stop()
+			return
+		}
+		if k, ok := paletteLegacyKinds[strings.ToLower(text)]; ok {
+			if err := app.showPrimaryKindPage(k, false); err != nil {
+				app.Notice.Warn(err.Error())
+			}
 			return
 		}
 		app.palette.Submit(text)

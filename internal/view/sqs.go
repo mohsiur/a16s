@@ -12,6 +12,7 @@ import (
 
 	sqsTypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/gdamore/tcell/v2"
+	"github.com/mohsiur/a16s/internal/color"
 	"github.com/mohsiur/a16s/internal/utils"
 	kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 	"github.com/rivo/tview"
@@ -407,4 +408,266 @@ func (k *sqsKind) SelectionDetail() string {
 		a["ApproximateNumberOfMessagesDelayed"],
 		dlq,
 	)
+}
+
+// ---- Legacy-style ECS chrome integration ----
+
+type sqsView struct {
+	view
+	urls       []string
+	attrsByURL map[string]map[string]string
+}
+
+func newSQSView(urls []string, attrsByURL map[string]map[string]string, app *App) *sqsView {
+	keys := append(basicKeyInputs, []keyDescriptionPair{
+		hotKeyMap["enter"],
+	}...)
+	return &sqsView{
+		view: *newView(app, keys, secondaryPageKeyMap{
+			DescriptionKind: describePageKeys,
+		}),
+		urls:       urls,
+		attrsByURL: attrsByURL,
+	}
+}
+
+// showQueuesPage is the SQS list page. Mirrors lambda.go: prefer the cached
+// inventory from sqsKind so first paint after `:sqs` is instant; fall back to
+// a synchronous list.
+func (app *App) showQueuesPage(reload bool) error {
+	app.kind = SQSKind
+	if switched := app.switchPage(reload); switched {
+		return nil
+	}
+	sk := getSQSKind()
+	if sk != nil {
+		if err := sk.loadInventory(app); err != nil {
+			return err
+		}
+		sk.mu.RLock()
+		urls := append([]string(nil), sk.urls...)
+		attrs := make(map[string]map[string]string, len(sk.attrsByURL))
+		for k, v := range sk.attrsByURL {
+			attrs[k] = v
+		}
+		sk.mu.RUnlock()
+		return buildResourcePage(urls, app, nil, func() resourceViewBuilder {
+			return newSQSView(urls, attrs, app)
+		})
+	}
+	urls, err := app.Store.ListQueues(context.Background())
+	return buildResourcePage(urls, app, err, func() resourceViewBuilder {
+		return newSQSView(urls, nil, app)
+	})
+}
+
+func getSQSKind() *sqsKind {
+	k, ok := kindpkg.Get("sqs")
+	if !ok {
+		return nil
+	}
+	sk, _ := k.(*sqsKind)
+	return sk
+}
+
+func (v *sqsView) getViewAndFooter() (*view, *tview.TextView) {
+	return &v.view, v.footer.sqs
+}
+
+func (v *sqsView) headerParamsBuilder() []headerPageParam {
+	params := make([]headerPageParam, 0, len(v.urls))
+	for i, url := range v.urls {
+		params = append(params, headerPageParam{
+			title:      queueNameFromURL(url),
+			entityName: url,
+			items:      v.headerPageItems(i),
+		})
+	}
+	return params
+}
+
+func (v *sqsView) headerPageItems(index int) []headerItem {
+	url := v.urls[index]
+	a := v.attrsByURL[url]
+	dlq := "no"
+	if a["RedrivePolicy"] != "" {
+		dlq = "yes"
+	}
+	return []headerItem{
+		{name: "Name", value: queueNameFromURL(url)},
+		{name: "URL", value: url},
+		{name: "Messages", value: orEmpty(a["ApproximateNumberOfMessages"])},
+		{name: "In flight", value: orEmpty(a["ApproximateNumberOfMessagesNotVisible"])},
+		{name: "Delayed", value: orEmpty(a["ApproximateNumberOfMessagesDelayed"])},
+		{name: "DLQ", value: dlq},
+		{name: "VisibilityTimeout", value: orEmpty(a["VisibilityTimeout"])},
+		{name: "RetentionPeriod", value: orEmpty(a["MessageRetentionPeriod"])},
+	}
+}
+
+func (v *sqsView) tableParamsBuilder() (title string, headers []string, rowsBuilder func() [][]string) {
+	title = fmt.Sprintf(color.TableTitleFmt, v.app.kind, "all", len(v.urls))
+	headers = []string{"Name", "Messages", "InFlight", "Delayed", "DLQ"}
+	rowsBuilder = func() (data [][]string) {
+		for _, url := range v.urls {
+			copyURL := url
+			a := v.attrsByURL[url]
+			dlq := "no"
+			if a["RedrivePolicy"] != "" {
+				dlq = "yes"
+			}
+			row := []string{
+				queueNameFromURL(url),
+				orEmpty(a["ApproximateNumberOfMessages"]),
+				orEmpty(a["ApproximateNumberOfMessagesNotVisible"]),
+				orEmpty(a["ApproximateNumberOfMessagesDelayed"]),
+				dlq,
+			}
+			data = append(data, row)
+			entity := Entity{
+				sqsQueueName: copyURL,
+				entityName:   copyURL,
+			}
+			v.originalRowReferences = append(v.originalRowReferences, entity)
+		}
+		return data
+	}
+	return
+}
+
+func orEmpty(s string) string {
+	if s == "" {
+		return utils.EmptyText
+	}
+	return s
+}
+
+// ---- SQS Peek (messages) ----
+
+type sqsPeekView struct {
+	view
+	queueURL string
+	queue    string
+	messages []sqsTypes.Message
+}
+
+func newSQSPeekView(queueURL string, msgs []sqsTypes.Message, app *App) *sqsPeekView {
+	keys := append(basicKeyInputs, []keyDescriptionPair{
+		hotKeyMap["enter"],
+	}...)
+	return &sqsPeekView{
+		view: *newView(app, keys, secondaryPageKeyMap{
+			DescriptionKind: describePageKeys,
+		}),
+		queueURL: queueURL,
+		queue:    queueNameFromURL(queueURL),
+		messages: msgs,
+	}
+}
+
+func (app *App) showQueueMessagesPage(reload bool) error {
+	app.kind = SQSPeekKind
+	if app.sqsQueueName == "" {
+		app.Notice.Warn("no queue selected")
+		app.back()
+		return nil
+	}
+	if switched := app.switchPage(reload); switched {
+		return nil
+	}
+	msgs, err := app.Store.PeekMessages(context.Background(), app.sqsQueueName)
+	return buildResourcePage(msgs, app, err, func() resourceViewBuilder {
+		return newSQSPeekView(app.sqsQueueName, msgs, app)
+	})
+}
+
+func (v *sqsPeekView) getViewAndFooter() (*view, *tview.TextView) {
+	return &v.view, v.footer.sqsPeek
+}
+
+func (v *sqsPeekView) headerParamsBuilder() []headerPageParam {
+	params := make([]headerPageParam, 0, len(v.messages))
+	for i, m := range v.messages {
+		id := ""
+		if m.MessageId != nil {
+			id = *m.MessageId
+		}
+		params = append(params, headerPageParam{
+			title:      v.queue + " > " + id,
+			entityName: id,
+			items:      v.headerPageItems(i),
+		})
+	}
+	return params
+}
+
+func (v *sqsPeekView) headerPageItems(index int) []headerItem {
+	m := v.messages[index]
+	body := ""
+	if m.Body != nil {
+		body = *m.Body
+	}
+	preview := body
+	if len(preview) > 200 {
+		preview = preview[:200] + "…"
+	}
+	id := ""
+	if m.MessageId != nil {
+		id = *m.MessageId
+	}
+	receipt := ""
+	if m.ReceiptHandle != nil {
+		r := *m.ReceiptHandle
+		if len(r) > 30 {
+			receipt = r[:30] + "…"
+		} else {
+			receipt = r
+		}
+	}
+	return []headerItem{
+		{name: "MessageId", value: id},
+		{name: "Queue", value: v.queue},
+		{name: "Sent", value: peekSentAge(m.Attributes)},
+		{name: "Size", value: fmt.Sprintf("%d", len(body))},
+		{name: "ReceiptHandle", value: receipt},
+		{name: "Body preview", value: strings.ReplaceAll(preview, "\n", " ")},
+	}
+}
+
+func (v *sqsPeekView) tableParamsBuilder() (title string, headers []string, rowsBuilder func() [][]string) {
+	title = fmt.Sprintf(color.TableTitleFmt, v.app.kind, v.queue, len(v.messages))
+	headers = []string{"MessageId", "Sent", "Size", "Body"}
+	rowsBuilder = func() (data [][]string) {
+		for _, m := range v.messages {
+			copyM := m
+			body := ""
+			if m.Body != nil {
+				body = *m.Body
+			}
+			preview := body
+			if len(preview) > 80 {
+				preview = strings.ReplaceAll(preview[:80], "\n", " ") + "…"
+			} else {
+				preview = strings.ReplaceAll(preview, "\n", " ")
+			}
+			id := ""
+			if m.MessageId != nil {
+				id = *m.MessageId
+			}
+			row := []string{
+				id,
+				peekSentAge(m.Attributes),
+				fmt.Sprintf("%d", len(body)),
+				preview,
+			}
+			data = append(data, row)
+			entity := Entity{
+				sqsMessage: &copyM,
+				entityName: id,
+			}
+			v.originalRowReferences = append(v.originalRowReferences, entity)
+		}
+		return data
+	}
+	return
 }
