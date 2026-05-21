@@ -1,8 +1,21 @@
-# a16s — Easily Manage AWS Resources in Terminal 🐱
+# a16s
 
-`a16s` is a terminal application for browsing and operating AWS resources from a single k9s-style TUI. It started as a fork of [keidarcy/e1s](https://github.com/keidarcy/e1s) (ECS-only) and now also covers Lambda, SQS, and DynamoDB through a `:`-palette flow. Inspired by [k9s](https://github.com/derailed/k9s).
+A terminal UI for browsing AWS — ECS, Lambda, SQS, and DynamoDB — in one [k9s](https://github.com/derailed/k9s)-style interface.
 
-> **Status:** active fork. ECS feature parity with upstream is preserved; multi-service additions live behind the `:` palette.
+`a16s` is a fork of [keidarcy/e1s](https://github.com/keidarcy/e1s) that keeps the ECS feature set intact and adds a `:` command palette for jumping between AWS services without leaving the terminal.
+
+> **Status:** active development. ECS parity with upstream is preserved; Lambda, SQS, and DynamoDB are usable but not yet feature-complete. Expect breaking changes until the first tagged release.
+
+![palette demo placeholder](docs/img/palette.gif)
+<!-- TODO: record a 10-second asciinema of `:` → lambda → b (open in browser). Save to docs/img/palette.gif. -->
+
+## Why a16s
+
+- **One TUI for the most-used AWS services.** ECS, Lambda, SQS, and DynamoDB without flipping browser tabs.
+- **Familiar k9s-style flow.** `:` to jump, vim keys to move, `?` for help.
+- **Background preload.** First `:lambda` / `:sqs` / `:ddb` after the splash screen is instant on accounts with hundreds of resources.
+- **Cross-kind jumps.** From a Lambda's DLQ, hit Enter to land on the matching SQS queue with the cursor pre-positioned.
+- **Read-only by default if you want it.** `--read-only` disables every mutating action.
 
 ## Quick start
 
@@ -11,31 +24,34 @@ go install github.com/mohsiur/a16s/cmd/a16s@latest
 a16s
 ```
 
-Open the palette with `:` and type a kind:
+Press `:` to open the palette and type a kind:
 
-- `:cluster` — ECS clusters (default landing view)
-- `:lambda` — Lambda functions
-- `:sqs` — SQS queues
-- `:ddb` (alias `:dynamodb`) — DynamoDB tables
-- `:exit` / `:quit` / `:q` — leave the app
+| Verb | Lands on |
+|---|---|
+| `:profiles` | AWS profile picker (default landing screen) |
+| `:clusters` | ECS clusters → services → tasks → containers |
+| `:lambdas` (alias `:lambda`) | Lambda functions |
+| `:sqs` (alias `:queues`) | SQS queues |
+| `:ddb` (aliases `:dynamodb`, `:tables`) | DynamoDB tables |
+| `:exit` / `:quit` / `:q` | Leave the app |
 
-`Tab` cycles autocomplete (e.g. `:c<Tab>` rotates through `cluster`, `container`).
+`Tab` autocompletes among registered verbs. `Esc` cancels the palette.
 
 ## AWS credentials and configuration
 
-`a16s` uses the default [aws-cli configuration](https://github.com/aws/aws-cli/blob/develop/README.rst#configuration). It does not store or send your access key or secret key anywhere. Credentials are only used to securely connect to AWS APIs through the AWS SDK for Go.
+`a16s` uses the standard [AWS CLI configuration](https://github.com/aws/aws-cli/blob/develop/README.rst#configuration) — it does not store, transmit, or rewrite your credentials. All AWS calls go through the official AWS SDK for Go.
 
-You can choose AWS credentials and target region in three ways:
+Credentials and region can come from any of:
 
-- Use your default AWS CLI profile and region.
-- Override them at startup with `AWS_PROFILE`, `AWS_REGION`, `--profile`, or `--region`.
-- Switch them while `a16s` is running with `Ctrl+P` for profiles and `Ctrl+R` for regions.
+- The default AWS CLI profile (`AWS_PROFILE` and `AWS_REGION` env vars).
+- CLI flags: `--profile`, `--region`.
+- The in-app picker: `Ctrl+P` for profiles, `Ctrl+R` for regions.
 
-`a16s` reads local AWS shared config and credentials files, so it works with common setups such as static credentials, assume-role profiles, `credential_process`, and AWS IAM Identity Center or SSO-based configurations.
+`a16s` understands shared config and credentials files, including assume-role profiles, `credential_process`, and AWS IAM Identity Center / SSO. If your profile sets the region in `~/.aws/config` rather than the env var, `a16s` will resolve it from the config — useful for SSO-based workflows.
 
 ## Installation
 
-`a16s` is available on Linux, macOS and Windows.
+`a16s` runs on Linux, macOS, and Windows (amd64 and arm64).
 
 ```bash
 # go install (recommended while pre-release)
@@ -47,16 +63,19 @@ cd a16s
 go build -o a16s ./cmd/a16s
 ```
 
-Pre-built binaries, brew taps, and Docker images will be published once the fork stabilizes.
+Pre-built binaries, a Homebrew tap, and Docker images will follow once the fork stabilises and tags its first release. Until then, `go install` is the path of least surprise.
+
+### Prerequisites
+
+- Go 1.26+ (only for `go install` / building from source).
+- AWS CLI credentials configured (any standard mechanism works).
+- [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) — required only if you plan to use ECS Exec or port forwarding.
 
 ## Usage
 
-Make sure you have the AWS CLI installed and properly configured with the necessary permissions, and the [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) installed if you plan to use interactive exec or port forwarding features.
-
 ```
 $ a16s -h
-a16s is a terminal application to easily browse and manage AWS resources 🐱.
-Check https://github.com/mohsiur/a16s for more details.
+a16s is a terminal application to easily browse and manage AWS resources.
 
 Usage:
   a16s [flags]
@@ -70,11 +89,11 @@ Flags:
   -l, --log-file string      specify the log file path (default "${TMPDIR}a16s.log")
       --profile string       specify the AWS profile
       --read-only            sets read only mode
-  -r, --refresh int          specify the default refresh rate as an integer, sets -1 to stop auto refresh (sec) (default 30)
+  -r, --refresh int          default refresh rate (sec). -1 disables auto refresh. (default 30)
       --region string        specify the AWS region
       --service string       specify the default service (requires --cluster)
-  -s, --shell string         specify interactive ecs exec shell (default "/bin/sh")
-      --splash               display startup splash screen (AWS load runs before the UI) (default true)
+  -s, --shell string         interactive ecs exec shell (default "/bin/sh")
+      --splash               display startup splash (AWS load runs before the UI) (default true)
       --theme string         specify color theme
   -v, --version              version for a16s
 ```
@@ -82,43 +101,101 @@ Flags:
 ### Examples
 
 ```bash
-# default config
-$ a16s
+# default: launches into the profile picker
+a16s
+
 # explicit profile + region
-$ AWS_PROFILE=custom-profile AWS_REGION=us-east-2 a16s
-$ a16s --profile custom-profile --region us-east-2
-# default cluster + service
-$ a16s --cluster cluster-1 --service service-1
-# read-only, debug, no auto-refresh, custom log path, json, dracula theme
-$ a16s --read-only --debug --refresh -1 --log-file /tmp/a16s.log --json --theme dracula
+AWS_PROFILE=custom-profile AWS_REGION=us-east-2 a16s
+a16s --profile custom-profile --region us-east-2
+
+# skip the picker — open straight into a cluster's services
+a16s --cluster my-cluster
+
+# read-only, debug, no auto-refresh, custom log path, json logs, dracula theme
+a16s --read-only --debug --refresh -1 --log-file /tmp/a16s.log --json --theme dracula
+
 # disable startup splash
-$ a16s --splash=false
+a16s --splash=false
 ```
 
-### Config file
+## Feature tour
 
-Default config file path is `$HOME/.config/a16s/config.yml`. You can specify a different config file with `--config-file`. Because `a16s` uses [viper](https://github.com/spf13/viper?tab=readme-ov-file#what-is-viper), standard config formats supported by viper can be used.
+### ECS — clusters → services → tasks → containers
 
-Typical settings:
+The original e1s flow. Drill in with `Enter` (or `l` / right arrow), back out with `Esc` (or `h` / left arrow).
 
-- `theme`
-- `refresh`
-- `read-only`
-- `log-file`
-- default `cluster` and `service`
-- `splash`
-- color overrides
+![ECS screenshot](assets/e1s-screenshot.png)
 
-### Theme and colors
+Supported actions on ECS resources include:
 
-Theme and colors can be specified by options or config file. Full themes list can be found [here](https://github.com/keidarcy/alacritty-theme/tree/master/themes). If you prefer to use your own color theme, specify the colors in the config file.
+- Describe (`d`) — clusters, services, deployments, revisions, tasks, containers, task definitions, autoscaling.
+- Logs (`L`) — CloudWatch Logs tail, with real-time streaming when the service uses a single log group.
+- Exec (`s` on a container) — interactive ECS Exec shell.
+- Instance shell (`s` on a container instance) — SSM Session Manager.
+- Port forwarding (`F`) — local + remote host port forwarding via SSM.
+- Update service (`U`) — change desired count, force new deployment, swap task definitions.
+- Stop task (`S`) — with confirmation modal.
+- Register task definition (`U` on a task def) — pull, edit, register a revision.
+- File transfer (`P` on a container) — push and pull files through S3.
+
+![ECS Exec demo](assets/e1s-interactive-exec-demo.gif)
+
+### Lambda
+
+`:lambdas` lists every function in the active region. Per-function actions:
+
+- `Enter` or `L` — tail CloudWatch Logs. Use `f` to drop the TUI and read the log in your `$PAGER` (defaults to `less -R`) so the whole stream can be copied.
+- `i` — invoke with a JSON payload (read-only mode disables this).
+- `D` — jump to the function's DLQ in `:sqs`.
+- `b` — open the function in the AWS console.
+- `d` — describe (full configuration JSON).
+
+<!-- TODO: docs/img/lambda.png -->
+
+### SQS
+
+`:sqs` lists queues with message counts, in-flight, delay, and DLQ flag.
+
+- `Enter` — peek the first batch of messages without affecting consumers (uses `VisibilityTimeout=0`).
+- `s` — send a test message.
+- `p` — purge (with confirmation).
+- `b` — open the queue in the AWS console.
+- `d` — describe (URL + queue attributes).
+
+<!-- TODO: docs/img/sqs.png -->
+
+### DynamoDB
+
+`:ddb` lists tables. Drill in to view indexes, then scan items.
+
+- Table → indexes — base table first, then GSIs (alphabetical), then LSIs.
+- Index → items — first column is the partition key, second is the sort key (when present), then the rest alphabetically.
+- `q` on an index — query (form-based).
+- `b` — open the table in the AWS console (works on table, index, and item views).
+
+<!-- TODO: docs/img/ddb.png -->
+
+### Navigation, filter, sort
+
+- Vim keys: `h` `j` `k` `l` ↔ left, down, up, right. Arrow keys also work.
+- `/` — text filter. Supports `column:value` syntax. `Esc` clears.
+- `F1`–`F12` — sort by column index. Repeat to flip direction.
+- `:` palette — `Tab` autocompletes, `Esc` cancels.
+- `Ctrl+P` / `Ctrl+R` — switch profile / region without leaving the app.
+
+![filter](assets/e1s-table-filter.png)
+![sort](assets/e1s-table-sort-via-column.png)
+
+### Themes
+
+Themes can be picked by name (`--theme dracula`) or fully overridden in the config file. The Alacritty theme list works as a starting palette.
 
 ```yml
+theme: dracula
 colors:
   BgColor: "#272822"
   FgColor: "#f8f8f2"
   BorderColor: "#a1efe4"
-  Black: "#272822"
   Red: "#f92672"
   Green: "#a6e22e"
   Yellow: "#f4bf75"
@@ -128,69 +205,61 @@ colors:
   Gray: "#808080"
 ```
 
-### Key bindings
+![dracula](assets/e1s-theme-dracula.png)
 
-`a16s` supports Vim-style navigation: use `h`, `j`, `k`, `l` for left, down, up, right respectively.
+### Config file
 
-Common shortcuts:
+Default path: `$HOME/.config/a16s/config.yml`. Override with `--config-file`. `a16s` uses [viper](https://github.com/spf13/viper), so any viper-supported format is accepted.
 
-- `:` — open the kind palette (Tab cycles, Esc cancels).
-- `?` — help page.
-- `Ctrl+P` / `Ctrl+R` — switch AWS profile / region.
-- `/` — table filter. `Esc` clears.
-- `F1`–`F12` — sort the current table by column index.
-- `d` — describe selected resource.
-- `c` — copy current page name or describe content.
-- `b` — open in AWS console.
-- `r` — refresh.
-- `s` — shell into supported task / instance / container.
+Common settings:
 
-Press `?` to see the full list.
+- `theme`, `colors`
+- `refresh` — auto-refresh interval, `-1` to disable
+- `read-only`
+- `log-file`, `json`, `debug`
+- `cluster`, `service` — default ECS targets
+- `splash`
 
-### Development
+### Key bindings (top-level)
+
+| Key | Action |
+|---|---|
+| `?` | Help page (full key reference) |
+| `:` | Open kind palette |
+| `Esc` / `h` / `←` | Back / cancel (terminates at profile picker) |
+| `Enter` / `l` / `→` | Drill in / select |
+| `/` | Filter table |
+| `F1`–`F12` | Sort by column |
+| `r` | Refresh current view |
+| `d` | Describe selected resource |
+| `b` | Open in AWS console |
+| `c` | Copy page name / content to clipboard |
+| `Ctrl+P` | Switch AWS profile |
+| `Ctrl+R` | Switch AWS region |
+
+Press `?` inside the app for the full, kind-aware list.
+
+## Development
 
 ```bash
-go run cmd/a16s/main.go --debug --log-file /tmp/a16s.log
-```
+# run from source
+go run ./cmd/a16s --debug --log-file /tmp/a16s.log
 
-```bash
+# tail logs in another tab
 tail -f /tmp/a16s.log
+
+# tests
+go test ./...
+
+# vet
+go vet ./...
 ```
 
-## Features
-
-### Multi-service browsing (fork additions)
-
-- ECS, Lambda, SQS, and DynamoDB share the same `:` palette and table chrome.
-- Background preload — the first `:lambda`, `:sqs`, or `:ddb` is instant after splash.
-- Cross-kind navigation — Enter `:l` on a Lambda function with a DLQ to jump straight to the DLQ row in `:sqs`.
-- Async build with a loading placeholder so the UI stays responsive on slow lists.
-
-### ECS feature parity (from upstream e1s)
-
-- Drill-down: clusters → services → tasks → containers.
-- Describe clusters, services, deployments, revisions, tasks, containers, task defs, autoscaling.
-- CloudWatch Logs (awslogs) and realtime log streaming for single-log-group cases.
-- ECS Exec interactive shell into containers, plus instance shell via SSM.
-- Update services, register new task definitions, stop tasks.
-- Local + remote host port forwarding sessions.
-- File transfer through S3-backed workflows.
-
-### Navigation and discovery
-
-- Vim-style navigation with rich keyboard shortcuts.
-- In-table filtering with simple text or `column:value` syntax.
-- Per-column sorting with function keys.
-- Profile and region pickers with in-app switching.
-
-### Customization
-
-- Built-in themes plus per-color overrides in config.
-- Configurable refresh interval, splash behavior, shell, default targets.
+The `internal/view` package owns the TUI and per-kind plumbing. Each AWS service has a dedicated file (`lambda.go`, `sqs.go`, `dynamodb.go`) plus a kind registration that wires it into the `:` palette.
 
 ## Acknowledgements
 
-`a16s` is a fork of [keidarcy/e1s](https://github.com/keidarcy/e1s). The ECS browsing experience and the broader k9s-inspired layout are upstream's work — credit goes to Xing Yahao and the e1s contributors. The multi-service `:` palette and the per-kind plumbing on top are this fork's additions.
+`a16s` is a fork of [keidarcy/e1s](https://github.com/keidarcy/e1s). The ECS browsing experience, the k9s-inspired chrome, and most of the screenshots above are upstream work — credit to Xing Yahao and the e1s contributors. The multi-service palette, Lambda / SQS / DynamoDB views, and per-kind plumbing are this fork's additions.
 
 ## Thanks
 
