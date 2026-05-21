@@ -15,12 +15,18 @@ import kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 // Map keys are canonical Name() values; aliases (e.g. "dynamodb" on ddbKind)
 // would confuse kind.All()'s dedupe.
 var resourceRegistryName = map[kind]string{
-	LambdaKind:        "lambda",
-	SQSKind:           "sqs",
-	SQSPeekKind:       "sqs",
-	DynamoDBKind:      "ddb",
-	DynamoDBIndexKind: "ddb",
-	DynamoDBScanKind:  "ddb",
+	LambdaKind:            "lambda",
+	SQSKind:               "sqs",
+	SQSPeekKind:           "sqs",
+	DynamoDBKind:          "ddb",
+	DynamoDBIndexKind:     "ddb",
+	DynamoDBScanKind:      "ddb",
+	ClusterKind:           "clusters",
+	ServiceKind:           "services",
+	TaskKind:              "tasks",
+	ContainerKind:         "containers",
+	TaskDefinitionKind:    "task-definitions",
+	ServiceDeploymentKind: "service-deployments",
 }
 
 // resolveResource returns the kindpkg.Resource for k, or nil when k has not
