@@ -278,9 +278,9 @@ func (app *App) showQueuesPage(reload bool) error {
 			attrs[k] = v
 		}
 		sk.mu.RUnlock()
-		if app.sqsQueueName != "" {
+		if selected := app.SQSQueueURL(); selected != "" {
 			for i, url := range urls {
-				if url == app.sqsQueueName {
+				if url == selected {
 					app.rowIndex = i + 1
 					break
 				}
@@ -466,7 +466,8 @@ func newSQSPeekView(queueURL string, msgs []sqsTypes.Message, app *App) *sqsPeek
 
 func (app *App) showQueueMessagesPage(reload bool) error {
 	app.kind = SQSPeekKind
-	if app.sqsQueueName == "" {
+	queueURL := app.SQSQueueURL()
+	if queueURL == "" {
 		app.Notice.Warn("no queue selected")
 		app.back()
 		return nil
@@ -474,9 +475,9 @@ func (app *App) showQueueMessagesPage(reload bool) error {
 	if switched := app.switchPage(reload); switched {
 		return nil
 	}
-	msgs, err := app.Clients.PeekMessages(context.Background(), app.sqsQueueName)
+	msgs, err := app.Clients.PeekMessages(context.Background(), queueURL)
 	return buildResourcePage(msgs, app, err, func() resourceViewBuilder {
-		return newSQSPeekView(app.sqsQueueName, msgs, app)
+		return newSQSPeekView(queueURL, msgs, app)
 	})
 }
 
