@@ -55,6 +55,12 @@ func (k *clusterKind) FooterItem() kindpkg.FooterItem {
 	return kindpkg.FooterItem{Label: "clusters"}
 }
 
+// Traits.Drillable lets Enter drill cluster → services. Without it the trait
+// gate in handleSelected (#36) treats the page as a leaf and Enter no-ops.
+func (k *clusterKind) Traits() kindpkg.Traits {
+	return kindpkg.Traits{Drillable: true}
+}
+
 func getClusterKind() *clusterKind {
 	k, ok := kindpkg.Get("clusters")
 	if !ok {
@@ -89,6 +95,11 @@ func (k *serviceKind) BrowserURL(_ string) (string, error) {
 }
 func (k *serviceKind) FooterItem() kindpkg.FooterItem {
 	return kindpkg.FooterItem{Label: "services"}
+}
+
+// Traits.Drillable lets Enter drill service → tasks.
+func (k *serviceKind) Traits() kindpkg.Traits {
+	return kindpkg.Traits{Drillable: true}
 }
 
 // PageHandle returns the parent cluster's ARN so service pages stay scoped
@@ -144,6 +155,11 @@ func (k *taskKind) BrowserURL(_ string) (string, error) {
 }
 func (k *taskKind) FooterItem() kindpkg.FooterItem {
 	return kindpkg.FooterItem{Label: "tasks"}
+}
+
+// Traits.Drillable lets Enter drill task → containers.
+func (k *taskKind) Traits() kindpkg.Traits {
+	return kindpkg.Traits{Drillable: true}
 }
 
 // PageHandle returns the parent service's ARN so task pages stay scoped to
