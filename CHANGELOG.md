@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/mohsiur/a16s/compare/v0.1.2...v0.1.3) (2026-05-22)
+
+
+### Bug Fixes
+
+* **view:** restore ECS cluster/service/task Enter drill ([#45](https://github.com/mohsiur/a16s/issues/45)) ([a9ccba5](https://github.com/mohsiur/a16s/commit/a9ccba5129a6d2b5c67083050312003359193bed))
+
 ## [0.1.2](https://github.com/mohsiur/a16s/compare/v0.1.1...v0.1.2) (2026-05-22)
 
 
