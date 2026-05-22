@@ -29,7 +29,15 @@ type lambdaKind struct {
 	loadErr  error
 }
 
-func (k *lambdaKind) Name() string { return "lambda" }
+func (k *lambdaKind) Name() string  { return "lambda" }
+func (k *lambdaKind) Title() string { return "lambdas" }
+
+func (k *lambdaKind) Show(host kindpkg.Host, reload bool) error {
+	if app, ok := host.(*App); ok {
+		return app.showLambdasPage(reload)
+	}
+	return nil
+}
 
 func (k *lambdaKind) Reset() {
 	k.mu.Lock()

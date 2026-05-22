@@ -410,11 +410,19 @@ func (app *App) preheatKindForRefresh(k kind) {
 
 // Show Primary kind page
 func (app *App) showPrimaryKindPage(k kind, reload bool) error {
-	var err error
 	if k == TaskDefinitionKind {
 		app.backKind = app.kind
 	}
 	app.kind = k
+	// Resource-aware kinds dispatch through the registry. Legacy kinds fall
+	// through to the enum switch when Resource.Show returns
+	// ErrShowUnimplemented (the BaseKind default).
+	if r := resolveResource(k); r != nil {
+		if err := r.Show(app, reload); !errors.Is(err, kindpkg.ErrShowUnimplemented) {
+			return app.finishShowPrimaryKindPage(err, reload)
+		}
+	}
+	var err error
 	switch k {
 	case ProfileKind:
 		err = app.showProfilesPage(reload)
@@ -434,26 +442,22 @@ func (app *App) showPrimaryKindPage(k kind, reload bool) error {
 		err = app.showTaskDefinitionPage(reload)
 	case ServiceDeploymentKind:
 		err = app.showServiceDeploymentPage(reload)
-	case LambdaKind:
-		err = app.showLambdasPage(reload)
-	case SQSKind:
-		err = app.showQueuesPage(reload)
-	case SQSPeekKind:
-		err = app.showQueueMessagesPage(reload)
-	case DynamoDBKind:
-		err = app.showTablesPage(reload)
-	case DynamoDBIndexKind:
-		err = app.showTableIndexesPage(reload)
-	case DynamoDBScanKind:
-		err = app.showIndexItemsPage(reload)
 	default:
 		app.kind = ClusterKind
 		err = app.showClustersPage(reload)
 	}
+	return app.finishShowPrimaryKindPage(err, reload)
+}
+
+// finishShowPrimaryKindPage applies the post-show side effects that used to
+// live at the bottom of showPrimaryKindPage: noisy notices on error, a
+// "Viewing X..." breadcrumb on success, debug log on reload. Extracted so the
+// Resource dispatch path and the legacy enum switch can share it.
+func (app *App) finishShowPrimaryKindPage(err error, reload bool) error {
 	if err != nil {
 		if errors.Is(err, ErrHandledNavigation) {
-			// A valid page has already been shown (for example, fallback from empty
-			// clusters to regions), so skip noisy error notice.
+			// A valid page has already been shown (for example, fallback from
+			// empty clusters to regions), so skip the noisy error notice.
 			return nil
 		}
 		slog.Error("failed to show primary kind page", "error", err)

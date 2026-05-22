@@ -42,8 +42,14 @@ type sqsKind struct {
 	loadErr    error
 }
 
-func (k *sqsKind) Name() string {
-	return "sqs"
+func (k *sqsKind) Name() string  { return "sqs" }
+func (k *sqsKind) Title() string { return "queues" }
+
+func (k *sqsKind) Show(host kindpkg.Host, reload bool) error {
+	if app, ok := host.(*App); ok {
+		return app.showQueuesPage(reload)
+	}
+	return nil
 }
 
 func (k *sqsKind) Reset() {
@@ -298,10 +304,18 @@ type sqsPeekKind struct {
 	kindpkg.BaseKind
 }
 
-func (k *sqsPeekKind) Name() string       { return "sqs-messages" }
-func (k *sqsPeekKind) Reset()             {}
-func (k *sqsPeekKind) Selection() any     { return nil }
-func (k *sqsPeekKind) SetSelection(any)   {}
+func (k *sqsPeekKind) Name() string     { return "sqs-messages" }
+func (k *sqsPeekKind) Title() string    { return "messages" }
+func (k *sqsPeekKind) Reset()           {}
+func (k *sqsPeekKind) Selection() any   { return nil }
+func (k *sqsPeekKind) SetSelection(any) {}
+
+func (k *sqsPeekKind) Show(host kindpkg.Host, reload bool) error {
+	if app, ok := host.(*App); ok {
+		return app.showQueueMessagesPage(reload)
+	}
+	return nil
+}
 func (k *sqsPeekKind) BrowserURL(region string) (string, error) {
 	if sk := getSQSKind(); sk != nil {
 		return sk.BrowserURL(region)

@@ -42,7 +42,15 @@ type ddbKind struct {
 }
 
 func (k *ddbKind) Name() string      { return "ddb" }
+func (k *ddbKind) Title() string     { return "tables" }
 func (k *ddbKind) Aliases() []string { return []string{"dynamodb"} }
+
+func (k *ddbKind) Show(host kindpkg.Host, reload bool) error {
+	if app, ok := host.(*App); ok {
+		return app.showTablesPage(reload)
+	}
+	return nil
+}
 func (k *ddbKind) Reset() {
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -355,10 +363,18 @@ type ddbIndexKind struct {
 	kindpkg.BaseKind
 }
 
-func (k *ddbIndexKind) Name() string       { return "ddb-indexes" }
-func (k *ddbIndexKind) Reset()             {}
-func (k *ddbIndexKind) Selection() any     { return nil }
-func (k *ddbIndexKind) SetSelection(any)   {}
+func (k *ddbIndexKind) Name() string     { return "ddb-indexes" }
+func (k *ddbIndexKind) Title() string    { return "indexes" }
+func (k *ddbIndexKind) Reset()           {}
+func (k *ddbIndexKind) Selection() any   { return nil }
+func (k *ddbIndexKind) SetSelection(any) {}
+
+func (k *ddbIndexKind) Show(host kindpkg.Host, reload bool) error {
+	if app, ok := host.(*App); ok {
+		return app.showTableIndexesPage(reload)
+	}
+	return nil
+}
 func (k *ddbIndexKind) BrowserURL(region string) (string, error) {
 	if dk := getDDBKind(); dk != nil {
 		return dk.BrowserURL(region)
@@ -373,10 +389,18 @@ type ddbScanKind struct {
 	kindpkg.BaseKind
 }
 
-func (k *ddbScanKind) Name() string       { return "ddb-items" }
-func (k *ddbScanKind) Reset()             {}
-func (k *ddbScanKind) Selection() any     { return nil }
-func (k *ddbScanKind) SetSelection(any)   {}
+func (k *ddbScanKind) Name() string     { return "ddb-items" }
+func (k *ddbScanKind) Title() string    { return "items" }
+func (k *ddbScanKind) Reset()           {}
+func (k *ddbScanKind) Selection() any   { return nil }
+func (k *ddbScanKind) SetSelection(any) {}
+
+func (k *ddbScanKind) Show(host kindpkg.Host, reload bool) error {
+	if app, ok := host.(*App); ok {
+		return app.showIndexItemsPage(reload)
+	}
+	return nil
+}
 func (k *ddbScanKind) BrowserURL(region string) (string, error) {
 	if dk := getDDBKind(); dk != nil {
 		return dk.BrowserURL(region)
