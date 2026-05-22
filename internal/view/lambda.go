@@ -208,7 +208,7 @@ func getLambdaKind() *lambdaKind {
 }
 
 func (v *lambdaView) getViewAndFooter() (*view, *tview.TextView) {
-	return &v.view, v.footer.lambda
+	return &v.view, v.footer.middle
 }
 
 func (v *lambdaView) headerParamsBuilder() []headerPageParam {

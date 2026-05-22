@@ -46,7 +46,7 @@ func (app *App) showTaskDefinitionPage(reload bool) error {
 }
 
 func (v *taskDefinitionView) getViewAndFooter() (*view, *tview.TextView) {
-	return &v.view, v.footer.taskDefinition
+	return &v.view, v.footer.middle
 }
 
 // Build info pages for task page

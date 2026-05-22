@@ -16,7 +16,10 @@ import (
 var (
 	_ kindpkg.Resource = (*lambdaKind)(nil)
 	_ kindpkg.Resource = (*sqsKind)(nil)
+	_ kindpkg.Resource = (*sqsPeekKind)(nil)
 	_ kindpkg.Resource = (*ddbKind)(nil)
+	_ kindpkg.Resource = (*ddbIndexKind)(nil)
+	_ kindpkg.Resource = (*ddbScanKind)(nil)
 	_ kindpkg.Resource = (*clusterKind)(nil)
 	_ kindpkg.Resource = (*serviceKind)(nil)
 	_ kindpkg.Resource = (*taskKind)(nil)
@@ -157,14 +160,109 @@ func TestSQSKind_BrowserURL(t *testing.T) {
 }
 
 // TestResolveResource_DDBMigrated pins that all three DDB enums route through
-// the same Resource. The legacy openInBrowser switch collapsed index/scan
-// pages onto the parent table URL; the dispatcher must preserve that by
-// keying every DDB enum onto "ddb".
+// the registry. DynamoDBKind goes to the parent ddb Resource; the index and
+// scan leaves get their own Resource so they can return their own
+// FooterItem ("indexes", "items") while delegating BrowserURL upward.
 func TestResolveResource_DDBMigrated(t *testing.T) {
 	for _, k := range []kind{DynamoDBKind, DynamoDBIndexKind, DynamoDBScanKind} {
 		r := resolveResource(k)
 		if r == nil {
 			t.Fatalf("resolveResource(%s) = nil; want non-nil — Phase 3 migrated ddb", k)
+		}
+	}
+}
+
+// TestResolveResource_LeavesHaveOwnResource pins that SQSPeek, DDBIndex, and
+// DDBScan resolve to a *different* Resource than their parents. Phase 4
+// split them so they can return distinct FooterItem labels — collapsing
+// them back onto the parent would regress the footer.
+func TestResolveResource_LeavesHaveOwnResource(t *testing.T) {
+	cases := []struct {
+		parent, leaf kind
+	}{
+		{SQSKind, SQSPeekKind},
+		{DynamoDBKind, DynamoDBIndexKind},
+		{DynamoDBKind, DynamoDBScanKind},
+	}
+	for _, c := range cases {
+		p, l := resolveResource(c.parent), resolveResource(c.leaf)
+		if p == nil || l == nil {
+			t.Fatalf("resolveResource(%s)=%v, resolveResource(%s)=%v; want both non-nil", c.parent, p, c.leaf, l)
+		}
+		if p == l {
+			t.Errorf("%s and %s resolved to same Resource; want distinct so FooterItem differs", c.parent, c.leaf)
+		}
+	}
+}
+
+// TestFooterItem_AllMigratedKinds pins the label every migrated kind shows
+// in the middle footer slot. These match what the legacy enum switch in
+// addFooterItems used to render via the kind enum's String(); migrating the
+// labels onto kindpkg.Resource must preserve them exactly.
+func TestFooterItem_AllMigratedKinds(t *testing.T) {
+	cases := []struct {
+		k    kind
+		want string
+	}{
+		{LambdaKind, "lambdas"},
+		{SQSKind, "queues"},
+		{SQSPeekKind, "messages"},
+		{DynamoDBKind, "tables"},
+		{DynamoDBIndexKind, "indexes"},
+		{DynamoDBScanKind, "items"},
+		{ClusterKind, "clusters"},
+		{ServiceKind, "services"},
+		{TaskKind, "tasks"},
+		{ContainerKind, "containers"},
+		{TaskDefinitionKind, "task definitions"},
+		{ServiceDeploymentKind, "service deployments"},
+	}
+	for _, c := range cases {
+		r := resolveResource(c.k)
+		if r == nil {
+			t.Errorf("resolveResource(%s) = nil; want non-nil", c.k)
+			continue
+		}
+		got := r.FooterItem().Label
+		if got != c.want {
+			t.Errorf("FooterItem(%s).Label = %q; want %q", c.k, got, c.want)
+		}
+	}
+}
+
+// TestMiddleFooterLabel pins the middle-cell label for every kind that
+// reaches addFooterItems. The four ECS chain kinds whose labels live in
+// the always-shown left row return "" so the if/else falls through to the
+// empty-stretch branch — matching legacy behaviour.
+func TestMiddleFooterLabel(t *testing.T) {
+	cases := []struct {
+		k    kind
+		want string
+	}{
+		// ECS chain kinds: middle slot stays empty, label is in the left row.
+		{ClusterKind, ""},
+		{ServiceKind, ""},
+		{TaskKind, ""},
+		{ContainerKind, ""},
+		// Migrated middle-slot kinds: routed through Resource.FooterItem.
+		{LambdaKind, "lambdas"},
+		{SQSKind, "queues"},
+		{SQSPeekKind, "messages"},
+		{DynamoDBKind, "tables"},
+		{DynamoDBIndexKind, "indexes"},
+		{DynamoDBScanKind, "items"},
+		{TaskDefinitionKind, "task definitions"},
+		{ServiceDeploymentKind, "service deployments"},
+		// Unmigrated middle-slot kinds: still via the kind enum's String().
+		{ProfileKind, "profiles"},
+		{RegionKind, "regions"},
+		{HelpKind, "help"},
+		{InstanceKind, "instances"},
+	}
+	for _, c := range cases {
+		got := middleFooterLabel(c.k)
+		if got != c.want {
+			t.Errorf("middleFooterLabel(%s) = %q; want %q", c.k, got, c.want)
 		}
 	}
 }

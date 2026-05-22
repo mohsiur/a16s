@@ -15,7 +15,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func init() { kindpkg.Register(&ddbKind{}) }
+func init() {
+	kindpkg.Register(&ddbKind{})
+	kindpkg.Register(&ddbIndexKind{})
+	kindpkg.Register(&ddbScanKind{})
+}
 
 type ddbKind struct {
 	kindpkg.BaseKind
@@ -343,8 +347,48 @@ func getDDBKind() *ddbKind {
 	return dk
 }
 
+// ddbIndexKind and ddbScanKind are Resource adapters for the index and
+// scan-items leaf pages. BrowserURL delegates to the parent ddbKind (the AWS
+// console collapses both views onto the parent table's URL); FooterItem
+// returns the leaf-specific label.
+type ddbIndexKind struct {
+	kindpkg.BaseKind
+}
+
+func (k *ddbIndexKind) Name() string       { return "ddb-indexes" }
+func (k *ddbIndexKind) Reset()             {}
+func (k *ddbIndexKind) Selection() any     { return nil }
+func (k *ddbIndexKind) SetSelection(any)   {}
+func (k *ddbIndexKind) BrowserURL(region string) (string, error) {
+	if dk := getDDBKind(); dk != nil {
+		return dk.BrowserURL(region)
+	}
+	return "", nil
+}
+func (k *ddbIndexKind) FooterItem() kindpkg.FooterItem {
+	return kindpkg.FooterItem{Label: "indexes"}
+}
+
+type ddbScanKind struct {
+	kindpkg.BaseKind
+}
+
+func (k *ddbScanKind) Name() string       { return "ddb-items" }
+func (k *ddbScanKind) Reset()             {}
+func (k *ddbScanKind) Selection() any     { return nil }
+func (k *ddbScanKind) SetSelection(any)   {}
+func (k *ddbScanKind) BrowserURL(region string) (string, error) {
+	if dk := getDDBKind(); dk != nil {
+		return dk.BrowserURL(region)
+	}
+	return "", nil
+}
+func (k *ddbScanKind) FooterItem() kindpkg.FooterItem {
+	return kindpkg.FooterItem{Label: "items"}
+}
+
 func (v *ddbView) getViewAndFooter() (*view, *tview.TextView) {
-	return &v.view, v.footer.dynamodb
+	return &v.view, v.footer.middle
 }
 
 func (v *ddbView) headerParamsBuilder() []headerPageParam {
@@ -462,7 +506,7 @@ func (app *App) showTableIndexesPage(reload bool) error {
 }
 
 func (v *ddbIndexView) getViewAndFooter() (*view, *tview.TextView) {
-	return &v.view, v.footer.ddbIndex
+	return &v.view, v.footer.middle
 }
 
 func (v *ddbIndexView) headerParamsBuilder() []headerPageParam {
@@ -606,7 +650,7 @@ func (app *App) showIndexItemsPage(reload bool) error {
 }
 
 func (v *ddbScanView) getViewAndFooter() (*view, *tview.TextView) {
-	return &v.view, v.footer.ddbScan
+	return &v.view, v.footer.middle
 }
 
 func (v *ddbScanView) headerParamsBuilder() []headerPageParam {
