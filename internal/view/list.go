@@ -46,14 +46,14 @@ func (v *view) getListString(entity Entity) string {
 
 		switch v.app.kind {
 		case ServiceKind:
-			logs, err = v.app.Store.GetServiceLogs(entity.service.TaskDefinition)
+			logs, err = v.app.Clients.GetServiceLogs(entity.service.TaskDefinition)
 		case TaskKind:
 			taskId := utils.ArnToName(entity.task.TaskArn)
-			logs, err = v.app.Store.GetLogStreamLogs(entity.task.TaskDefinitionArn, taskId, "")
+			logs, err = v.app.Clients.GetLogStreamLogs(entity.task.TaskDefinitionArn, taskId, "")
 		case ContainerKind:
 			taskId := utils.ArnToName(v.app.task.TaskArn)
 			containerName := entity.container.Name
-			logs, err = v.app.Store.GetLogStreamLogs(v.app.task.TaskDefinitionArn, taskId, *containerName)
+			logs, err = v.app.Clients.GetLogStreamLogs(v.app.task.TaskDefinitionArn, taskId, *containerName)
 		}
 
 		if err != nil {
@@ -111,7 +111,7 @@ func (v *view) realtimeAwsLog(entity Entity) {
 	if tdArn == nil {
 		return
 	}
-	td, err := v.app.Store.DescribeTaskDefinition(tdArn)
+	td, err := v.app.Clients.DescribeTaskDefinition(tdArn)
 	if err != nil {
 		v.app.Notice.Warnf("failed to switchToLogsList")
 		return

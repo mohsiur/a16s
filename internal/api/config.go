@@ -14,10 +14,10 @@ import (
 	regionsLib "github.com/keidarcy/aws-regions/v3"
 )
 
-// SwitchAwsConfig switches to a different AWS profile and reinitializes clients.
-// Tests that build Store via struct literal don't run NewStore, so initialise
-// Clients lazily here.
-func (store *Store) SwitchAwsConfig(profile string, region string) error {
+// SwitchAwsConfig switches to a different AWS profile and reinitializes
+// every per-service client against the new config. Fires OnConfigSwitch so
+// kind caches reset before the next render.
+func (c *Clients) SwitchAwsConfig(profile string, region string) error {
 	os.Setenv("AWS_PROFILE", profile)
 	os.Setenv("AWS_REGION", region)
 
@@ -27,12 +27,7 @@ func (store *Store) SwitchAwsConfig(profile string, region string) error {
 		return err
 	}
 
-	store.Config = &cfg
-	if store.Clients == nil {
-		store.Clients = NewClients(cfg)
-	} else {
-		store.Clients.SwitchConfig(cfg)
-	}
+	c.SwitchConfig(cfg)
 
 	slog.Info("switched AWS profile", slog.String("AWS_PROFILE", profile), slog.String("AWS_REGION", region))
 

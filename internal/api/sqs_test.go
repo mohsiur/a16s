@@ -10,7 +10,7 @@ import (
 	smithymiddleware "github.com/aws/smithy-go/middleware"
 )
 
-func newStoreWithSQS(t *testing.T, fn func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error)) *Store {
+func newClientsWithSQS(t *testing.T, fn func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error)) *Clients {
 	t.Helper()
 	cfg := aws.Config{Region: "us-east-1"}
 	c := sqs.NewFromConfig(cfg, func(o *sqs.Options) {
@@ -18,18 +18,18 @@ func newStoreWithSQS(t *testing.T, fn func(ctx context.Context, in smithymiddlew
 			return stack.Finalize.Add(smithymiddleware.FinalizeMiddlewareFunc("mock", fn), smithymiddleware.Before)
 		})
 	})
-	return &Store{Config: &cfg, Clients: ClientsWithSqsForTest(cfg, c)}
+	return ClientsWithSqsForTest(cfg, c)
 }
 
 func TestListQueuesHappyPath(t *testing.T) {
-	store := newStoreWithSQS(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+	c := newClientsWithSQS(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
 		return smithymiddleware.FinalizeOutput{
 			Result: &sqs.ListQueuesOutput{
 				QueueUrls: []string{"https://sqs.us-east-1.amazonaws.com/111/foo"},
 			},
 		}, smithymiddleware.Metadata{}, nil
 	})
-	got, err := store.ListQueues(context.Background())
+	got, err := c.ListQueues(context.Background())
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -40,7 +40,7 @@ func TestListQueuesHappyPath(t *testing.T) {
 
 func TestPeekMessagesUsesZeroVisibilityTimeout(t *testing.T) {
 	var captured *sqs.ReceiveMessageInput
-	store := newStoreWithSQS(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+	c := newClientsWithSQS(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
 		// The serialised input is on in.Request — but the easier approach is to
 		// re-read the original input via the context. For this MVP test we just
 		// confirm the call returns and check the wire-level request via the
@@ -53,7 +53,7 @@ func TestPeekMessagesUsesZeroVisibilityTimeout(t *testing.T) {
 			},
 		}, smithymiddleware.Metadata{}, nil
 	})
-	msgs, err := store.PeekMessages(context.Background(), "https://sqs.us-east-1.amazonaws.com/111/foo")
+	msgs, err := c.PeekMessages(context.Background(), "https://sqs.us-east-1.amazonaws.com/111/foo")
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}

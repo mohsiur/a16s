@@ -48,7 +48,7 @@ func (app *App) showTasksPages(reload bool) error {
 		serviceName = nil
 	}
 
-	resources, warnStoppedAfterEmptyRunning, err := app.Store.ListTasks(app.cluster.ClusterName, serviceName, app.taskStatus)
+	resources, warnStoppedAfterEmptyRunning, err := app.Clients.ListTasks(app.cluster.ClusterName, serviceName, app.taskStatus)
 
 	err = buildResourcePage(resources, app, err, func() resourceViewBuilder {
 		if warnStoppedAfterEmptyRunning && len(resources) > 0 {

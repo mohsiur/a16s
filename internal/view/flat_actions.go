@@ -29,7 +29,7 @@ func (v *view) openLambdaLogs() {
 		return
 	}
 	logGroup := "/aws/lambda/" + aws.ToString(selected.lambdaFunction.FunctionName)
-	logs, err := v.app.Store.GetLogGroupTail(context.Background(), logGroup, 100)
+	logs, err := v.app.Clients.GetLogGroupTail(context.Background(), logGroup, 100)
 	if err != nil {
 		v.app.Notice.Warn(err.Error())
 		return
@@ -46,7 +46,7 @@ func (v *view) invokeLambda() {
 		return
 	}
 	name := aws.ToString(selected.lambdaFunction.FunctionName)
-	out, err := v.app.Store.InvokeFunction(context.Background(), name, []byte("{}"))
+	out, err := v.app.Clients.InvokeFunction(context.Background(), name, []byte("{}"))
 	if err != nil {
 		v.app.Notice.Warn(err.Error())
 		return
@@ -92,7 +92,7 @@ func (v *view) purgeSelectedQueue() {
 		v.app.Notice.Warn("no queue selected")
 		return
 	}
-	if err := v.app.Store.PurgeQueue(context.Background(), selected.sqsQueueName); err != nil {
+	if err := v.app.Clients.PurgeQueue(context.Background(), selected.sqsQueueName); err != nil {
 		v.app.Notice.Warn(err.Error())
 		return
 	}
@@ -107,7 +107,7 @@ func (v *view) sendTestMessageToQueue() {
 		v.app.Notice.Warn("no queue selected")
 		return
 	}
-	if err := v.app.Store.SendMessage(context.Background(), selected.sqsQueueName, `{"a16s":"test"}`); err != nil {
+	if err := v.app.Clients.SendMessage(context.Background(), selected.sqsQueueName, `{"a16s":"test"}`); err != nil {
 		v.app.Notice.Warn(err.Error())
 		return
 	}
@@ -164,7 +164,7 @@ func (v *view) queryDDBIndex() {
 			return
 		}
 		val := prompt.GetText()
-		items, err := v.app.Store.QueryEquality(context.Background(), tableName, idx.name, idx.partitionKey, val, 25)
+		items, err := v.app.Clients.QueryEquality(context.Background(), tableName, idx.name, idx.partitionKey, val, 25)
 		if err != nil {
 			v.app.Notice.Warn(err.Error())
 			v.closeAuxPage()

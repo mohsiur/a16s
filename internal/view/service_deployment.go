@@ -36,7 +36,7 @@ func (app *App) showServiceDeploymentPage(reload bool) error {
 		return nil
 	}
 
-	resources, err := app.Store.ListServiceDeployments(app.cluster.ClusterName, app.service.ServiceName)
+	resources, err := app.Clients.ListServiceDeployments(app.cluster.ClusterName, app.service.ServiceName)
 	err = buildResourcePage(resources, app, err, func() resourceViewBuilder {
 		return newServiceDeploymentView(resources, app)
 	})

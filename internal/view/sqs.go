@@ -160,7 +160,7 @@ func (k *sqsKind) loadInventory(app kindpkg.App, reload bool) error {
 	k.loadDone = done
 	k.mu.Unlock()
 
-	urls, err := app.APIStore().ListQueues(context.Background())
+	urls, err := app.AWSClients().ListQueues(context.Background())
 	var attrsByURL map[string]map[string]string
 	if err == nil {
 		attrs := make([]map[string]string, len(urls))
@@ -169,7 +169,7 @@ func (k *sqsKind) loadInventory(app kindpkg.App, reload bool) error {
 		for i, url := range urls {
 			i, url := i, url
 			g.Go(func() error {
-				a, _ := app.APIStore().GetQueueAttributes(ctx, url)
+				a, _ := app.AWSClients().GetQueueAttributes(ctx, url)
 				attrs[i] = a
 				return nil
 			})
@@ -276,7 +276,7 @@ func (app *App) showQueuesPage(reload bool) error {
 			return newSQSView(urls, attrs, app)
 		})
 	}
-	urls, err := app.Store.ListQueues(context.Background())
+	urls, err := app.Clients.ListQueues(context.Background())
 	return buildResourcePage(urls, app, err, func() resourceViewBuilder {
 		return newSQSView(urls, nil, app)
 	})
@@ -440,7 +440,7 @@ func (app *App) showQueueMessagesPage(reload bool) error {
 	if switched := app.switchPage(reload); switched {
 		return nil
 	}
-	msgs, err := app.Store.PeekMessages(context.Background(), app.sqsQueueName)
+	msgs, err := app.Clients.PeekMessages(context.Background(), app.sqsQueueName)
 	return buildResourcePage(msgs, app, err, func() resourceViewBuilder {
 		return newSQSPeekView(app.sqsQueueName, msgs, app)
 	})

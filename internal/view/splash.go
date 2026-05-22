@@ -62,15 +62,15 @@ func (app *App) buildSplashPage() *tview.Flex {
 
 func (app *App) runSplashBootstrap() {
 	start := time.Now()
-	store, err := api.NewStore(globalProfile, globalRegion)
+	clients, err := api.NewAWSClients(globalProfile, globalRegion)
 	var clusters []types.Cluster
 	var services []types.Service
 	if err == nil {
 		if app.Option.Cluster == "" {
-			clusters, err = store.ListClusters()
+			clusters, err = clients.ListClusters()
 		} else {
 			cn := app.Option.Cluster
-			services, err = store.ListServices(&cn)
+			services, err = clients.ListServices(&cn)
 		}
 	}
 	elapsed := time.Since(start)
@@ -83,7 +83,7 @@ func (app *App) runSplashBootstrap() {
 			app.Stop()
 			return
 		}
-		app.Store = store
+		app.Clients = clients
 		if app.Option.Cluster == "" {
 			app.bootstrapClusters = clusters
 		} else {

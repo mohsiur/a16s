@@ -7,11 +7,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
-// TestClientsLazyAndCached pins the contract Store relies on: ECS is built
-// eagerly by NewClients; every other accessor is built on first call and
-// cached for subsequent calls (same pointer). PR-B's migration off Store
-// presumes this caching so kinds can call Clients.Lambda() per request
-// without re-paying construction.
+// TestClientsLazyAndCached pins the caching contract callers rely on: ECS is
+// built eagerly by NewClients; every other accessor is built on first call and
+// cached for subsequent calls (same pointer). Kinds call Clients.Lambda() per
+// request and presume this caching so they don't re-pay construction.
 func TestClientsLazyAndCached(t *testing.T) {
 	c := NewClients(aws.Config{Region: "us-east-1"})
 
@@ -48,9 +47,9 @@ func TestClientsLazyAndCached(t *testing.T) {
 	}
 }
 
-// TestClientsSwitchConfigRebuilds pins the post-switch invariant the legacy
-// SwitchAwsConfig relied on: ECS is rebuilt against the new config (different
-// pointer), every other client is reset and built fresh on next access.
+// TestClientsSwitchConfigRebuilds pins the post-switch invariant: ECS is
+// rebuilt against the new config (different pointer), every other client is
+// reset and built fresh on next access.
 func TestClientsSwitchConfigRebuilds(t *testing.T) {
 	c := NewClients(aws.Config{Region: "us-east-1"})
 
@@ -71,9 +70,8 @@ func TestClientsSwitchConfigRebuilds(t *testing.T) {
 }
 
 // TestClientsConcurrentAccess exercises the mutex: under -race, parallel
-// callers to a still-uninitialised accessor must not produce a data race or
-// a nil return. This is the property that motivated replacing the
-// "local capture before nil-check" pattern in store.go.
+// callers to a still-uninitialised accessor must not produce a data race or a
+// nil return.
 func TestClientsConcurrentAccess(t *testing.T) {
 	c := NewClients(aws.Config{Region: "us-east-1"})
 

@@ -187,7 +187,7 @@ func (v *view) instanceStartSession() {
 			v.app.Notice.Warn("Not a valid task with container instance")
 			return
 		}
-		instanceId, err = v.app.Store.GetTaskInstanceId(v.app.cluster.ClusterName, v.app.task.ContainerInstanceArn)
+		instanceId, err = v.app.Clients.GetTaskInstanceId(v.app.cluster.ClusterName, v.app.task.ContainerInstanceArn)
 		if err != nil {
 			v.app.Notice.Warnf("failed to get task instance id, err: %v", err)
 			return

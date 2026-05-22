@@ -11,7 +11,7 @@ import (
 	smithymiddleware "github.com/aws/smithy-go/middleware"
 )
 
-func newStoreWithDDB(t *testing.T, fn func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error)) *Store {
+func newClientsWithDDB(t *testing.T, fn func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error)) *Clients {
 	t.Helper()
 	cfg := aws.Config{Region: "us-east-1"}
 	c := dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
@@ -19,18 +19,18 @@ func newStoreWithDDB(t *testing.T, fn func(ctx context.Context, in smithymiddlew
 			return stack.Finalize.Add(smithymiddleware.FinalizeMiddlewareFunc("mock", fn), smithymiddleware.Before)
 		})
 	})
-	return &Store{Config: &cfg, Clients: ClientsWithDynamoDBForTest(cfg, c)}
+	return ClientsWithDynamoDBForTest(cfg, c)
 }
 
 func TestListTablesHappyPath(t *testing.T) {
-	store := newStoreWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+	c := newClientsWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
 		return smithymiddleware.FinalizeOutput{
 			Result: &dynamodb.ListTablesOutput{
 				TableNames: []string{"users", "events"},
 			},
 		}, smithymiddleware.Metadata{}, nil
 	})
-	got, err := store.ListTables(context.Background())
+	got, err := c.ListTables(context.Background())
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -44,7 +44,7 @@ func TestListTablesHappyPath(t *testing.T) {
 // slice contains entries from both pages in order.
 func TestListTablesTwoPages(t *testing.T) {
 	calls := 0
-	store := newStoreWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+	c := newClientsWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
 		calls++
 		switch calls {
 		case 1:
@@ -65,7 +65,7 @@ func TestListTablesTwoPages(t *testing.T) {
 		return smithymiddleware.FinalizeOutput{}, smithymiddleware.Metadata{}, nil
 	})
 
-	got, err := store.ListTables(context.Background())
+	got, err := c.ListTables(context.Background())
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -79,7 +79,7 @@ func TestListTablesTwoPages(t *testing.T) {
 // fetched return what we have with a nil error.
 func TestListTablesErrorAfterFirstPage(t *testing.T) {
 	calls := 0
-	store := newStoreWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+	c := newClientsWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
 		calls++
 		switch calls {
 		case 1:
@@ -96,7 +96,7 @@ func TestListTablesErrorAfterFirstPage(t *testing.T) {
 		return smithymiddleware.FinalizeOutput{}, smithymiddleware.Metadata{}, nil
 	})
 
-	got, err := store.ListTables(context.Background())
+	got, err := c.ListTables(context.Background())
 	if err != nil {
 		t.Fatalf("err = %v; want nil for partial-page failure", err)
 	}
@@ -109,10 +109,10 @@ func TestListTablesErrorAfterFirstPage(t *testing.T) {
 // very first page returns (nil, err) — partial success only kicks in once
 // at least one page has succeeded.
 func TestListTablesFirstPageErrorBubbles(t *testing.T) {
-	store := newStoreWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+	c := newClientsWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
 		return smithymiddleware.FinalizeOutput{}, smithymiddleware.Metadata{}, errors.New("boom")
 	})
-	got, err := store.ListTables(context.Background())
+	got, err := c.ListTables(context.Background())
 	if err == nil {
 		t.Fatalf("expected error; got %v", got)
 	}
@@ -122,7 +122,7 @@ func TestListTablesFirstPageErrorBubbles(t *testing.T) {
 }
 
 func TestScanFirstPageRespectsLimit(t *testing.T) {
-	store := newStoreWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+	c := newClientsWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
 		return smithymiddleware.FinalizeOutput{
 			Result: &dynamodb.ScanOutput{
 				Items: []map[string]ddbTypes.AttributeValue{
@@ -131,7 +131,7 @@ func TestScanFirstPageRespectsLimit(t *testing.T) {
 			},
 		}, smithymiddleware.Metadata{}, nil
 	})
-	items, err := store.ScanFirstPage(context.Background(), "users", 25)
+	items, err := c.ScanFirstPage(context.Background(), "users", 25)
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -141,16 +141,16 @@ func TestScanFirstPageRespectsLimit(t *testing.T) {
 }
 
 func TestScanIndexFirstPageDoesNotError(t *testing.T) {
-	store := newStoreWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+	c := newClientsWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
 		return smithymiddleware.FinalizeOutput{Result: &dynamodb.ScanOutput{}}, smithymiddleware.Metadata{}, nil
 	})
-	if _, err := store.ScanIndexFirstPage(context.Background(), "users", "gsi-email", 5); err != nil {
+	if _, err := c.ScanIndexFirstPage(context.Background(), "users", "gsi-email", 5); err != nil {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestQueryEqualityPassesArgs(t *testing.T) {
-	store := newStoreWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+	c := newClientsWithDDB(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
 		return smithymiddleware.FinalizeOutput{
 			Result: &dynamodb.QueryOutput{
 				Items: []map[string]ddbTypes.AttributeValue{
@@ -159,7 +159,7 @@ func TestQueryEqualityPassesArgs(t *testing.T) {
 			},
 		}, smithymiddleware.Metadata{}, nil
 	})
-	got, err := store.QueryEquality(context.Background(), "users", "gsi-email", "email", "a@b", 5)
+	got, err := c.QueryEquality(context.Background(), "users", "gsi-email", "email", "a@b", 5)
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}

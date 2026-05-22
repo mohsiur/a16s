@@ -98,7 +98,7 @@ func (v *view) stopTaskForm() (*tview.Form, *string) {
 			Task:    aws.String(taskId),
 			Cluster: aws.String(clusterName),
 		}
-		err := v.app.Store.StopTask(input)
+		err := v.app.Clients.StopTask(input)
 
 		if err != nil {
 			v.app.Notice.Error(err.Error())
@@ -140,7 +140,7 @@ func (v *view) rollbackServiceDeploymentForm() (*tview.Form, *string) {
 
 	// handle form submit
 	f.AddButton("Rollback", func() {
-		err := v.app.Store.RollbackServiceDeployment(v.app.serviceDeployment.ServiceDeploymentArn)
+		err := v.app.Clients.RollbackServiceDeployment(v.app.serviceDeployment.ServiceDeploymentArn)
 
 		if err != nil {
 			v.app.Notice.Error(err.Error())
@@ -188,7 +188,7 @@ func (v *view) serviceUpdateWithSpecificTaskDefinitionForm() (*tview.Form, *stri
 			Cluster:        v.app.cluster.ClusterName,
 			TaskDefinition: aws.String(td),
 		}
-		s, err := v.app.Store.UpdateService(input)
+		s, err := v.app.Clients.UpdateService(input)
 
 		if err != nil {
 			v.app.Notice.Error(err.Error())
@@ -249,7 +249,7 @@ func (v *view) serviceUpdateForm() (*tview.Form, *string) {
 				return
 			}
 
-			taskDefinitions, err := v.app.Store.ListTaskDefinition(&familyName)
+			taskDefinitions, err := v.app.Clients.ListTaskDefinition(&familyName)
 			if err != nil {
 				v.app.Notice.Errorf("Failed list task definition, err: %s", err.Error())
 				v.closeModal()
@@ -308,7 +308,7 @@ func (v *view) serviceUpdateForm() (*tview.Form, *string) {
 				familyPrefix = aws.String(trimmedPrefix)
 			}
 
-			families, err := v.app.Store.ListTaskDefinitionFamilies(familyPrefix)
+			families, err := v.app.Clients.ListTaskDefinitionFamilies(familyPrefix)
 			if err != nil {
 				v.app.Notice.Errorf("failed list task definition families, err: %s", err.Error())
 				v.closeModal()
@@ -404,7 +404,7 @@ func (v *view) serviceUpdateForm() (*tview.Form, *string) {
 				ForceNewDeployment:   force,
 				EnableExecuteCommand: &execCommand,
 			}
-			s, err = v.app.Store.UpdateService(input)
+			s, err = v.app.Clients.UpdateService(input)
 		} else {
 			input = &ecs.UpdateServiceInput{
 				Service:              aws.String(name),
@@ -413,7 +413,7 @@ func (v *view) serviceUpdateForm() (*tview.Form, *string) {
 				ForceNewDeployment:   force,
 				EnableExecuteCommand: &execCommand,
 			}
-			s, err = v.app.Store.UpdateService(input)
+			s, err = v.app.Clients.UpdateService(input)
 		}
 
 		if err != nil {
@@ -465,7 +465,7 @@ func (v *view) serviceMetricsForm() (*tview.Form, *string) {
 	f := ui.StyledForm(title)
 	f.AddInputField("Service ", service+placeholder, len(service)+len(placeholder)+1, nil, nil)
 
-	metrics, err := v.app.Store.GetMetrics(cluster, &service)
+	metrics, err := v.app.Clients.GetMetrics(cluster, &service)
 
 	// empty Metrics or empty
 	if err != nil || (len(metrics.CPUUtilization) == 0 && len(metrics.MemoryUtilization) == 0) {

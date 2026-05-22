@@ -97,8 +97,8 @@ type App struct {
 	// paletteInput is the active `:` command input, mounted as a 1-row child of
 	// mainScreen above Pages. nil when no palette is showing.
 	paletteInput *tview.InputField
-	// API client
-	*api.Store
+	// AWS service clients (lazy per-service, lock-protected on switch).
+	*api.Clients
 	// Option from cli args
 	Option
 	// Current screen item content, use uppercase to make items like app.cluster easy to access
@@ -135,10 +135,10 @@ type App struct {
 func newApp(option Option) (*App, error) {
 	globalProfile = os.Getenv("AWS_PROFILE")
 	globalRegion = os.Getenv("AWS_REGION")
-	var store *api.Store
+	var clients *api.Clients
 	var err error
 	if !option.Splash {
-		store, err = api.NewStore(globalProfile, globalRegion)
+		clients, err = api.NewAWSClients(globalProfile, globalRegion)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +161,7 @@ func newApp(option Option) (*App, error) {
 		Notice:           notice,
 		mainScreen:       main,
 		mainScreenFooter: footer,
-		Store:            store,
+		Clients:          clients,
 		Option:        option,
 		kind:          ClusterKind,
 		secondaryKind: EmptyKind,
@@ -485,7 +485,7 @@ func (app *App) onClose() {
 		for _, s := range app.sessions {
 			ids = append(ids, s.sessionId)
 		}
-		err := app.Store.TerminateSessions(ids)
+		err := app.Clients.TerminateSessions(ids)
 		if err != nil {
 			slog.Error("Failed to terminated port forwarding sessions", "error", err)
 		} else {
@@ -498,7 +498,7 @@ func (app *App) onClose() {
 }
 
 func (app *App) globalInputHandle(event *tcell.EventKey) *tcell.EventKey {
-	if app.Store == nil {
+	if app.Clients == nil {
 		switch event.Key() {
 		case tcell.KeyCtrlC:
 			return event
@@ -551,18 +551,20 @@ func (app *App) copyToClipboard(item string, content string) {
 	app.Notice.Info(fmt.Sprintf("Copied %s to clipboard", item))
 }
 
-// APIStore returns the embedded api.Store. Satisfies kind.App. Named APIStore
-// (not Store) because the *App struct already embeds *api.Store, whose name
-// is promoted as Store — defining a Store() method would collide.
-func (app *App) APIStore() *api.Store { return app.Store }
+// AWSClients returns the embedded api.Clients. Satisfies kind.App. Named
+// AWSClients (not Clients) because the *App struct already embeds *api.Clients,
+// whose name is promoted as Clients — defining a Clients() method would collide.
+func (app *App) AWSClients() *api.Clients { return app.Clients }
 
 // effectiveRegion returns the active AWS region. Prefer the resolved region on
 // the loaded SDK config (populated for SSO/shared-config profiles where
 // AWS_REGION isn't set), fall back to globalRegion (set from AWS_REGION env or
 // the in-app region picker).
 func (app *App) effectiveRegion() string {
-	if app.Store != nil && app.Store.Config != nil && app.Store.Config.Region != "" {
-		return app.Store.Config.Region
+	if app.Clients != nil {
+		if r := app.Clients.Config().Region; r != "" {
+			return r
+		}
 	}
 	return globalRegion
 }

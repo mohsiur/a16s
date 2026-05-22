@@ -12,10 +12,10 @@ import (
 	"github.com/mohsiur/a16s/internal/api"
 )
 
-// newStoreServingFunctions returns a Store whose Lambda client is mocked at
-// the SDK middleware layer. Each ListFunctions call returns the next slice
-// from `pages`; calls past len(pages) return an empty list.
-func newStoreServingFunctions(t *testing.T, pages [][]lambdaTypes.FunctionConfiguration) *api.Store {
+// newClientsServingFunctions returns a *api.Clients whose Lambda client is
+// mocked at the SDK middleware layer. Each ListFunctions call returns the
+// next slice from `pages`; calls past len(pages) return an empty list.
+func newClientsServingFunctions(t *testing.T, pages [][]lambdaTypes.FunctionConfiguration) *api.Clients {
 	t.Helper()
 	cfg := aws.Config{Region: "us-east-1"}
 	calls := 0
@@ -37,7 +37,7 @@ func newStoreServingFunctions(t *testing.T, pages [][]lambdaTypes.FunctionConfig
 			}), smithymiddleware.Before)
 		})
 	})
-	return api.StoreWithLambdaForTest(&cfg, c)
+	return api.ClientsWithLambdaForTest(cfg, c)
 }
 
 // TestLambdaLoadInventoryReloadRefetches asserts the contract that a
@@ -46,11 +46,11 @@ func newStoreServingFunctions(t *testing.T, pages [][]lambdaTypes.FunctionConfig
 // table — without it, both fall through to the cached fns from the first
 // `:lambda` and the screen never reflects new/removed functions.
 func TestLambdaLoadInventoryReloadRefetches(t *testing.T) {
-	store := newStoreServingFunctions(t, [][]lambdaTypes.FunctionConfiguration{
+	clients := newClientsServingFunctions(t, [][]lambdaTypes.FunctionConfiguration{
 		{{FunctionName: aws.String("first")}},
 		{{FunctionName: aws.String("second")}},
 	})
-	app := &fakeApp{store: store}
+	app := &fakeApp{clients: clients}
 	k := &lambdaKind{}
 
 	if err := k.loadInventory(app, false); err != nil {
@@ -78,11 +78,11 @@ func TestLambdaLoadInventoryReloadRefetches(t *testing.T) {
 // reload flag, a second loadInventory call must NOT re-hit the SDK. Preload's
 // instant-paint contract relies on this.
 func TestLambdaLoadInventoryNoReloadUsesCache(t *testing.T) {
-	store := newStoreServingFunctions(t, [][]lambdaTypes.FunctionConfiguration{
+	clients := newClientsServingFunctions(t, [][]lambdaTypes.FunctionConfiguration{
 		{{FunctionName: aws.String("first")}},
 		{{FunctionName: aws.String("second")}}, // should never be reached
 	})
-	app := &fakeApp{store: store}
+	app := &fakeApp{clients: clients}
 	k := &lambdaKind{}
 
 	if err := k.loadInventory(app, false); err != nil {

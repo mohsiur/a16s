@@ -11,7 +11,7 @@ import (
 	"github.com/mohsiur/a16s/internal/api"
 )
 
-func newStoreServingQueues(t *testing.T, queueURLs []string) *api.Store {
+func newClientsServingQueues(t *testing.T, queueURLs []string) *api.Clients {
 	t.Helper()
 	cfg := aws.Config{Region: "us-east-1"}
 	c := sqs.NewFromConfig(cfg, func(o *sqs.Options) {
@@ -32,7 +32,7 @@ func newStoreServingQueues(t *testing.T, queueURLs []string) *api.Store {
 			}), smithymiddleware.Before)
 		})
 	})
-	return api.StoreWithSqsForTest(&cfg, c)
+	return api.ClientsWithSqsForTest(cfg, c)
 }
 
 // TestCrossKindLambdaToDLQ asserts the cross-kind contract: when Lambda's DLQ
@@ -42,10 +42,10 @@ func newStoreServingQueues(t *testing.T, queueURLs []string) *api.Store {
 // per-row references key off it.
 func TestCrossKindLambdaToDLQ(t *testing.T) {
 	fullURL := "https://sqs.us-east-1.amazonaws.com/111/my-dlq"
-	store := newStoreServingQueues(t, []string{fullURL})
+	clients := newClientsServingQueues(t, []string{fullURL})
 
 	sk := &sqsKind{}
-	app := &fakeApp{store: store}
+	app := &fakeApp{clients: clients}
 	if err := sk.loadInventory(app, false); err != nil {
 		t.Fatalf("loadInventory err = %v", err)
 	}
