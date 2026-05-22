@@ -40,13 +40,14 @@ func (app *App) showContainersPage(reload bool) error {
 		return nil
 	}
 
-	if app.task == nil {
+	task := app.Task()
+	if task == nil {
 		app.back()
 		app.Notice.Warnf("no valid task")
 		return fmt.Errorf("no valid task")
 	}
 
-	resources := app.task.Containers
+	resources := task.Containers
 	err := buildResourcePage(resources, app, nil, func() resourceViewBuilder {
 		return newContainerView(resources, app)
 	})
@@ -102,7 +103,7 @@ func (v *containerView) headerPageItems(index int) (items []headerItem) {
 
 // Generate table params
 func (v *containerView) tableParamsBuilder() (title string, headers []string, rowsBuilder func() [][]string) {
-	title = fmt.Sprintf(color.TableTitleFmt, v.app.kind, utils.ArnToName(v.app.task.TaskArn), len(v.containers))
+	title = fmt.Sprintf(color.TableTitleFmt, v.app.kind, utils.ArnToName(v.app.Task().TaskArn), len(v.containers))
 	headers = []string{
 		"Name",
 		"Status",
@@ -114,7 +115,7 @@ func (v *containerView) tableParamsBuilder() (title string, headers []string, ro
 
 	rowsBuilder = func() (data [][]string) {
 		for _, c := range v.containers {
-			containerId := fmt.Sprintf("%s.%s", *v.app.cluster.ClusterName, *c.Name)
+			containerId := fmt.Sprintf("%s.%s", *v.app.Cluster().ClusterName, *c.Name)
 			portText := utils.EmptyText
 			ports := []string{}
 			for _, session := range v.app.sessions {

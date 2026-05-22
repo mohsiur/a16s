@@ -33,6 +33,9 @@ func getServiceViews() []serviceView {
 	app.cluster = &types.Cluster{
 		ClusterName: aws.String(clusterName1),
 	}
+	if k := getClusterKind(); k != nil {
+		k.SetSelection(app.cluster)
+	}
 	serviceView1 := newServiceView([]types.Service{service1}, app)
 	serviceView2 := newServiceView([]types.Service{service2}, app)
 
