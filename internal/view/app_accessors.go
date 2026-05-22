@@ -8,21 +8,17 @@ import (
 
 // Typed selection accessors backed by the kindpkg registry.
 //
-// The host historically tracked "current selection" through embedded
-// pointer fields on App.Entity (app.cluster, app.service, ...). Migrated
-// kinds now own their selection inside their Resource struct, and these
+// Migrated kinds own their selection inside their Resource struct; these
 // accessors expose that registry-backed selection as a typed value so
-// callers stop touching app.cluster directly.
+// callers read App state through Cluster(), Service(), etc. rather than
+// touching kind internals directly.
 //
 // Each accessor returns nil when:
 //   - the kind isn't registered (shouldn't happen at runtime; bug if it does)
 //   - the kind hasn't seen a SetSelection yet (first paint, post-Reset)
 //
-// Callers that previously did `if app.cluster != nil { ... }` should keep
-// that nil guard against the accessor's return value. Once Phase 4.7 PR-4
-// drops the legacy fields, these accessors are the only way to read the
-// active selection — so the nil semantics intentionally mirror the legacy
-// fields' "uninitialised" state.
+// Always nil-guard the accessor's return value before dereferencing — these
+// are the only path to the active selection.
 
 // Cluster returns the active ECS cluster selection, or nil when none.
 func (app *App) Cluster() *ecsTypes.Cluster {

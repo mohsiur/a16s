@@ -11,9 +11,9 @@ import (
 )
 
 // TestAccessors_NilWhenUnset pins that every typed accessor returns the
-// zero value before any SetSelection call. Callers historically nil-checked
-// app.cluster directly — the accessors must preserve that semantic so the
-// legacy guards keep working when readers migrate.
+// zero value before any SetSelection call. Callers nil-check the accessor
+// return value — this is the contract that lets that pattern work safely
+// on first paint and after kindpkg.ResetAll.
 func TestAccessors_NilWhenUnset(t *testing.T) {
 	t.Cleanup(kindpkg.ResetAll)
 	kindpkg.ResetAll()
@@ -52,9 +52,8 @@ func TestAccessors_NilWhenUnset(t *testing.T) {
 }
 
 // TestAccessors_ReadThroughRegistry pins that each accessor reflects the
-// value SetSelection wrote to the registry. This is the contract that lets
-// readers replace `v.app.cluster` with `v.app.Cluster()` without behaviour
-// changing.
+// value SetSelection wrote to the registry. This is the contract that
+// callers depend on for reading active selection state on App.
 func TestAccessors_ReadThroughRegistry(t *testing.T) {
 	t.Cleanup(kindpkg.ResetAll)
 	kindpkg.ResetAll()
