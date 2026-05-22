@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 )
@@ -44,6 +45,7 @@ type Clients struct {
 	lambda         *lambda.Client
 	sqs            *sqs.Client
 	dynamodb       *dynamodb.Client
+	s3             *s3.Client
 }
 
 // NewClients eagerly builds the ECS client (it's hot on every cluster page)
@@ -90,6 +92,7 @@ func (c *Clients) SwitchConfig(cfg aws.Config) {
 	c.lambda = nil
 	c.sqs = nil
 	c.dynamodb = nil
+	c.s3 = nil
 }
 
 func (c *Clients) ECS() *ecs.Client {
@@ -173,6 +176,15 @@ func (c *Clients) DynamoDB() *dynamodb.Client {
 	return c.dynamodb
 }
 
+func (c *Clients) S3() *s3.Client {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.s3 == nil {
+		c.s3 = s3.NewFromConfig(c.cfg)
+	}
+	return c.s3
+}
+
 // ClientsWith*ForTest helpers seed a Clients with a pre-built service
 // client so middleware-mocked tests can target a specific AWS API. Other
 // accessors will lazy-build against the supplied cfg as usual.
@@ -186,4 +198,8 @@ func ClientsWithSqsForTest(cfg aws.Config, c *sqs.Client) *Clients {
 
 func ClientsWithDynamoDBForTest(cfg aws.Config, c *dynamodb.Client) *Clients {
 	return &Clients{cfg: cfg, dynamodb: c}
+}
+
+func ClientsWithS3ForTest(cfg aws.Config, c *s3.Client) *Clients {
+	return &Clients{cfg: cfg, s3: c}
 }

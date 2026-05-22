@@ -29,6 +29,7 @@ const (
 	LambdaInvokeKind
 	LambdaConfigKind
 	LambdaLogTailKind
+	S3Kind
 )
 
 func (k kind) String() string {
@@ -88,6 +89,8 @@ func (k kind) String() string {
 		return "config"
 	case LambdaLogTailKind:
 		return "log tail"
+	case S3Kind:
+		return "buckets"
 	default:
 		return "unknownKind"
 	}
@@ -130,7 +133,7 @@ func (k kind) prevKind() kind {
 		return ServiceKind
 	case ContainerKind:
 		return TaskKind
-	case LambdaKind, SQSKind, DynamoDBKind:
+	case LambdaKind, SQSKind, DynamoDBKind, S3Kind:
 		return ProfileKind
 	case SQSPeekKind:
 		return SQSKind
@@ -163,7 +166,7 @@ func (k kind) getAppPageName(name string) string {
 	switch k {
 	case ProfileKind, RegionKind:
 		return k.String()
-	case ClusterKind, LambdaKind, SQSKind, DynamoDBKind:
+	case ClusterKind, LambdaKind, SQSKind, DynamoDBKind, S3Kind:
 		return prefix + "." + k.String()
 	case ServiceKind, TaskKind, ContainerKind, TaskDefinitionKind, ServiceDeploymentKind, DescriptionKind, InstanceKind, SQSPeekKind, DynamoDBIndexKind, DynamoDBScanKind:
 		return prefix + "." + k.String() + "." + name
