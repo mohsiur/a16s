@@ -8,50 +8,60 @@ import (
 	"github.com/rivo/tview"
 )
 
-// View footer struct
+// View footer struct. The four left-side fields (cluster/service/task/container)
+// are always shown; one of them gets the "selected" cyan highlight via
+// resource_view.go when the corresponding view is active. `middle` is a
+// single shared TextView for the current-kind cell that sits to the right of
+// the four ECS items — every other kind (lambda/sqs/dynamodb/profile/...)
+// returns it from getViewAndFooter so resource_view.go can highlight it.
 type footer struct {
-	footerFlex        *tview.Flex
-	cluster           *tview.TextView
-	service           *tview.TextView
-	task              *tview.TextView
-	container         *tview.TextView
-	profile           *tview.TextView
-	region            *tview.TextView
-	instance          *tview.TextView
-	taskDefinition    *tview.TextView
-	serviceDeployment *tview.TextView
-	help              *tview.TextView
-	lambda            *tview.TextView
-	sqs               *tview.TextView
-	sqsPeek           *tview.TextView
-	dynamodb          *tview.TextView
-	ddbIndex          *tview.TextView
-	ddbScan           *tview.TextView
+	footerFlex *tview.Flex
+	cluster    *tview.TextView
+	service    *tview.TextView
+	task       *tview.TextView
+	container  *tview.TextView
+	middle     *tview.TextView
 }
 
 func newFooter() *footer {
 	footerFlex := tview.NewFlex().SetDirection(tview.FlexColumn)
 	footerFlex.SetBackgroundColor(color.Color(theme.BgColor))
 	return &footer{
-		footerFlex:        footerFlex,
-		cluster:           tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, ClusterKind)),
-		service:           tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, ServiceKind)),
-		task:              tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, TaskKind)),
-		container:         tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, ContainerKind)),
-		profile:           tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, ProfileKind)),
-		region:            tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, RegionKind)),
-		instance:          tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, InstanceKind)).SetTextAlign(L),
-		taskDefinition:    tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, TaskDefinitionKind)).SetTextAlign(L),
-		serviceDeployment: tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, ServiceDeploymentKind)).SetTextAlign(L),
-		help:              tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, HelpKind)).SetTextAlign(L),
-		lambda:            tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, LambdaKind)).SetTextAlign(L),
-		sqs:               tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, SQSKind)).SetTextAlign(L),
-		sqsPeek:           tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, SQSPeekKind)).SetTextAlign(L),
-		dynamodb:          tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, DynamoDBKind)).SetTextAlign(L),
-		ddbIndex:          tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, DynamoDBIndexKind)).SetTextAlign(L),
-		ddbScan:           tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, DynamoDBScanKind)).SetTextAlign(L),
+		footerFlex: footerFlex,
+		cluster:    tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, ClusterKind)),
+		service:    tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, ServiceKind)),
+		task:       tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, TaskKind)),
+		container:  tview.NewTextView().SetDynamicColors(true).SetText(fmt.Sprintf(color.FooterItemFmt, ContainerKind)),
+		middle:     tview.NewTextView().SetDynamicColors(true).SetTextAlign(L),
 	}
 }
+
+// middleFooterLabel returns the label shown in the middle footer slot for
+// the active kind. The four ECS chain kinds (cluster/service/task/container)
+// deliberately return "" here because their label is already shown in the
+// always-visible left row — historically the legacy if/else fell through to
+// the empty-stretch branch for them.
+//
+// All other migrated kinds answer via kindpkg.Resource.FooterItem. The four
+// unmigrated middle-slot kinds (profile/region/help/instance) still go
+// through the enum's String() until they migrate.
+func middleFooterLabel(k kind) string {
+	switch k {
+	case ClusterKind, ServiceKind, TaskKind, ContainerKind:
+		return ""
+	}
+	if r := resolveResource(k); r != nil {
+		if item := r.FooterItem(); item.Label != "" {
+			return item.Label
+		}
+	}
+	switch k {
+	case ProfileKind, RegionKind, HelpKind, InstanceKind:
+		return k.String()
+	}
+	return ""
+}
+
 func (v *view) addFooterItems() {
 	// left resources
 	v.footer.footerFlex.AddItem(v.footer.cluster, 13, 0, false).
@@ -59,55 +69,15 @@ func (v *view) addFooterItems() {
 		AddItem(v.footer.task, 10, 0, false).
 		AddItem(v.footer.container, 15, 0, false)
 
-	// keep middle space
-	if v.app.kind == TaskDefinitionKind {
+	// middle "current kind" cell. resource_view.go has already SetText-ed the
+	// selected-format label onto v.footer.middle for migrated/unmigrated
+	// kinds; for the four ECS chain kinds the middle slot is unused (their
+	// label lives in the always-shown left row) and we fill the gap with an
+	// empty flex.
+	if middleFooterLabel(v.app.kind) != "" {
 		v.footer.footerFlex.
 			AddItem(tview.NewTextView(), 5, 0, false).
-			AddItem(v.footer.taskDefinition, 0, 1, false)
-	} else if v.app.kind == InstanceKind {
-		v.footer.footerFlex.
-			AddItem(tview.NewTextView(), 5, 0, false).
-			AddItem(v.footer.instance, 0, 1, false)
-	} else if v.app.kind == ServiceDeploymentKind {
-		v.footer.footerFlex.
-			AddItem(tview.NewTextView(), 5, 0, false).
-			AddItem(v.footer.serviceDeployment, 0, 1, false)
-	} else if v.app.kind == HelpKind {
-		v.footer.footerFlex.
-			AddItem(tview.NewTextView(), 5, 0, false).
-			AddItem(v.footer.help, 0, 1, false)
-	} else if v.app.kind == ProfileKind {
-		v.footer.footerFlex.
-			AddItem(tview.NewTextView(), 5, 0, false).
-			AddItem(v.footer.profile, 0, 1, false)
-	} else if v.app.kind == RegionKind {
-		v.footer.footerFlex.
-			AddItem(tview.NewTextView(), 5, 0, false).
-			AddItem(v.footer.region, 0, 1, false)
-	} else if v.app.kind == LambdaKind {
-		v.footer.footerFlex.
-			AddItem(tview.NewTextView(), 5, 0, false).
-			AddItem(v.footer.lambda, 0, 1, false)
-	} else if v.app.kind == SQSKind {
-		v.footer.footerFlex.
-			AddItem(tview.NewTextView(), 5, 0, false).
-			AddItem(v.footer.sqs, 0, 1, false)
-	} else if v.app.kind == SQSPeekKind {
-		v.footer.footerFlex.
-			AddItem(tview.NewTextView(), 5, 0, false).
-			AddItem(v.footer.sqsPeek, 0, 1, false)
-	} else if v.app.kind == DynamoDBKind {
-		v.footer.footerFlex.
-			AddItem(tview.NewTextView(), 5, 0, false).
-			AddItem(v.footer.dynamodb, 0, 1, false)
-	} else if v.app.kind == DynamoDBIndexKind {
-		v.footer.footerFlex.
-			AddItem(tview.NewTextView(), 5, 0, false).
-			AddItem(v.footer.ddbIndex, 0, 1, false)
-	} else if v.app.kind == DynamoDBScanKind {
-		v.footer.footerFlex.
-			AddItem(tview.NewTextView(), 5, 0, false).
-			AddItem(v.footer.ddbScan, 0, 1, false)
+			AddItem(v.footer.middle, 0, 1, false)
 	} else {
 		v.footer.footerFlex.
 			AddItem(tview.NewTextView(), 0, 1, false)

@@ -44,6 +44,9 @@ func (k *clusterKind) BrowserURL(_ string) (string, error) {
 	}
 	return utils.ArnToUrl(*k.selected.ClusterArn, ""), nil
 }
+func (k *clusterKind) FooterItem() kindpkg.FooterItem {
+	return kindpkg.FooterItem{Label: "clusters"}
+}
 
 func getClusterKind() *clusterKind {
 	k, ok := kindpkg.Get("clusters")
@@ -76,6 +79,9 @@ func (k *serviceKind) BrowserURL(_ string) (string, error) {
 		return "", nil
 	}
 	return utils.ArnToUrl(*k.selected.ServiceArn, ""), nil
+}
+func (k *serviceKind) FooterItem() kindpkg.FooterItem {
+	return kindpkg.FooterItem{Label: "services"}
 }
 
 func getServiceKind() *serviceKind {
@@ -120,6 +126,9 @@ func (k *taskKind) BrowserURL(_ string) (string, error) {
 	}
 	return utils.ArnToUrl(*k.selected.TaskArn, svcName), nil
 }
+func (k *taskKind) FooterItem() kindpkg.FooterItem {
+	return kindpkg.FooterItem{Label: "tasks"}
+}
 
 func getTaskKind() *taskKind {
 	k, ok := kindpkg.Get("tasks")
@@ -162,6 +171,9 @@ func (k *containerKind) BrowserURL(_ string) (string, error) {
 	}
 	return utils.ArnToUrl(*tk.selected.TaskArn, svcName), nil
 }
+func (k *containerKind) FooterItem() kindpkg.FooterItem {
+	return kindpkg.FooterItem{Label: "containers"}
+}
 
 func getContainerKind() *containerKind {
 	k, ok := kindpkg.Get("containers")
@@ -192,6 +204,9 @@ func (k *taskDefinitionKind) BrowserURL(_ string) (string, error) {
 	}
 	return utils.ArnToUrl(*k.selected.TaskDefinitionArn, ""), nil
 }
+func (k *taskDefinitionKind) FooterItem() kindpkg.FooterItem {
+	return kindpkg.FooterItem{Label: "task definitions"}
+}
 
 func getTaskDefinitionKind() *taskDefinitionKind {
 	k, ok := kindpkg.Get("task-definitions")
@@ -221,6 +236,9 @@ func (k *serviceDeploymentKind) BrowserURL(_ string) (string, error) {
 		return "", nil
 	}
 	return utils.ArnToUrl(*k.selected.ServiceDeploymentArn, ""), nil
+}
+func (k *serviceDeploymentKind) FooterItem() kindpkg.FooterItem {
+	return kindpkg.FooterItem{Label: "service deployments"}
 }
 
 func getServiceDeploymentKind() *serviceDeploymentKind {

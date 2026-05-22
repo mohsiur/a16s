@@ -43,7 +43,7 @@ func (app *App) showInstancesPage(reload bool) error {
 }
 
 func (v *instanceView) getViewAndFooter() (*view, *tview.TextView) {
-	return &v.view, v.footer.instance
+	return &v.view, v.footer.middle
 }
 
 // Build info pages for instance page

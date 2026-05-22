@@ -603,13 +603,16 @@ func (v *view) openInBrowser() {
 		v.app.Notice.Warnf("failed to openInBrowser")
 		return
 	}
-	arn := ""
-	taskService := ""
-	url := ""
 	region := v.app.effectiveRegion()
-	// Migrated kinds answer BrowserURL via kindpkg.Resource. When the migrated
-	// path returns a URL we skip the legacy switch entirely; otherwise the
-	// switch below is the fallback for kinds still on the enum (Phase 3+).
+	// Every browseable kind is now migrated to kindpkg.Resource.BrowserURL.
+	// Lambda/SQS/DDB and the ECS chain (cluster/service/taskDefinition/
+	// serviceDeployment) all return a non-empty URL whenever their selection
+	// is mirrored — which is unconditional in changeSelectedValues.
+	//
+	// taskKind and containerKind are the one exception: their BrowserURL
+	// returns "" when the parent service hasn't been mirrored into the
+	// registry (e.g. an entry path that bypassed changeSelectedValues). The
+	// fallback below covers that case by reading app.service directly.
 	if r := resolveResource(v.app.kind); r != nil {
 		if u, _ := r.BrowserURL(region); u != "" {
 			slog.Info("open", "url", u, "via", "kind.Resource")
@@ -619,61 +622,27 @@ func (v *view) openInBrowser() {
 			return
 		}
 	}
+	arn := ""
+	taskService := ""
 	switch v.app.kind {
-	case ClusterKind:
-		arn = *selected.cluster.ClusterArn
-	case ServiceKind:
-		arn = *selected.service.ServiceArn
 	case TaskKind:
 		taskService = *v.app.service.ServiceName
 		arn = *selected.task.TaskArn
 	case ContainerKind:
 		taskService = *v.app.service.ServiceName
 		arn = *v.app.task.TaskArn
-	case TaskDefinitionKind:
-		arn = *v.app.taskDefinition.TaskDefinitionArn
-	case ServiceDeploymentKind:
-		arn = *v.app.serviceDeployment.ServiceDeploymentArn
-	case LambdaKind:
-		if selected.lambdaFunction != nil {
-			url = utils.LambdaFunctionURL(region, awsToString(selected.lambdaFunction.FunctionName))
-		}
-	case SQSKind:
-		url = utils.SQSQueueURL(region, selected.sqsQueueName)
-	case SQSPeekKind:
-		url = utils.SQSQueueURL(region, v.app.sqsQueueName)
-	case DynamoDBKind:
-		if selected.ddbTable != nil {
-			url = utils.DynamoDBTableURL(region, awsToString(selected.ddbTable.TableName))
-		}
-	case DynamoDBIndexKind, DynamoDBScanKind:
-		if v.app.ddbTable != nil {
-			url = utils.DynamoDBTableURL(region, awsToString(v.app.ddbTable.TableName))
-		}
 	default:
 		v.app.Notice.Warnf("open in browser not supported for %s", v.app.kind)
 		return
 	}
-	if url == "" {
-		url = utils.ArnToUrl(arn, taskService)
-	}
+	url := utils.ArnToUrl(arn, taskService)
 	if len(url) == 0 {
 		slog.Warn("open failed", "url", url, "kind", v.app.kind, "arn", arn)
 		v.app.Notice.Warnf("open in browser not supported for %s", v.app.kind)
 		return
 	}
 	slog.Info("open", "url", url)
-	err = utils.OpenURL(url)
-	if err != nil {
+	if err := utils.OpenURL(url); err != nil {
 		v.app.Notice.Warnf("failed to open url %s\n", url)
 	}
-}
-
-// awsToString is a tiny helper so openInBrowser doesn't need to import the AWS
-// SDK just to dereference a *string. Mirrors aws.ToString without the dep.
-func awsToString(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
 }

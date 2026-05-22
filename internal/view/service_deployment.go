@@ -44,7 +44,7 @@ func (app *App) showServiceDeploymentPage(reload bool) error {
 }
 
 func (v *serviceDeploymentView) getViewAndFooter() (*view, *tview.TextView) {
-	return &v.view, v.footer.serviceDeployment
+	return &v.view, v.footer.middle
 }
 
 // Build info pages for service deployment page

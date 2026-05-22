@@ -37,7 +37,7 @@ func (app *App) showProfilesPage(reload bool) error {
 }
 
 func (v *profileView) getViewAndFooter() (*view, *tview.TextView) {
-	return &v.view, v.footer.profile
+	return &v.view, v.footer.middle
 }
 
 func (v *profileView) headerParamsBuilder() []headerPageParam {

@@ -16,7 +16,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func init() { kindpkg.Register(&sqsKind{}) }
+func init() {
+	kindpkg.Register(&sqsKind{})
+	kindpkg.Register(&sqsPeekKind{})
+}
 
 type sqsKind struct {
 	kindpkg.BaseKind
@@ -288,8 +291,29 @@ func getSQSKind() *sqsKind {
 	return sk
 }
 
+// sqsPeekKind is the Resource adapter for SQSPeekKind (per-queue messages).
+// BrowserURL delegates to the parent sqsKind so `o` opens the queue's console
+// page; FooterItem returns "messages" so the footer reflects the leaf view.
+type sqsPeekKind struct {
+	kindpkg.BaseKind
+}
+
+func (k *sqsPeekKind) Name() string       { return "sqs-messages" }
+func (k *sqsPeekKind) Reset()             {}
+func (k *sqsPeekKind) Selection() any     { return nil }
+func (k *sqsPeekKind) SetSelection(any)   {}
+func (k *sqsPeekKind) BrowserURL(region string) (string, error) {
+	if sk := getSQSKind(); sk != nil {
+		return sk.BrowserURL(region)
+	}
+	return "", nil
+}
+func (k *sqsPeekKind) FooterItem() kindpkg.FooterItem {
+	return kindpkg.FooterItem{Label: "messages"}
+}
+
 func (v *sqsView) getViewAndFooter() (*view, *tview.TextView) {
-	return &v.view, v.footer.sqs
+	return &v.view, v.footer.middle
 }
 
 func (v *sqsView) headerParamsBuilder() []headerPageParam {
@@ -423,7 +447,7 @@ func (app *App) showQueueMessagesPage(reload bool) error {
 }
 
 func (v *sqsPeekView) getViewAndFooter() (*view, *tview.TextView) {
-	return &v.view, v.footer.sqsPeek
+	return &v.view, v.footer.middle
 }
 
 func (v *sqsPeekView) headerParamsBuilder() []headerPageParam {

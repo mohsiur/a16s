@@ -37,7 +37,7 @@ func (app *App) showRegionsPage(reload bool) error {
 }
 
 func (v *regionView) getViewAndFooter() (*view, *tview.TextView) {
-	return &v.view, v.footer.region
+	return &v.view, v.footer.middle
 }
 
 func (v *regionView) headerParamsBuilder() []headerPageParam {

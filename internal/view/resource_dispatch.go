@@ -4,23 +4,20 @@ import kindpkg "github.com/mohsiur/a16s/internal/view/kind"
 
 // resourceRegistryName maps the legacy `kind` enum values to the canonical
 // names registered in kindpkg. Only kinds that have been migrated to
-// kindpkg.Resource appear here — call sites use resolveResource to opt into
-// the new path one method at a time, with the enum switches as fallback.
+// kindpkg.Resource appear here — call sites prefer the Resource method and
+// fall through to the legacy enum switch when it returns nil.
 //
-// Phase 2 added Lambda. Phase 3 adds SQS and DynamoDB. SQSKind/SQSPeekKind
-// both resolve to "sqs" and DynamoDBKind/DynamoDBIndexKind/DynamoDBScanKind
-// all resolve to "ddb" because the legacy openInBrowser switch already
-// collapsed those pages onto the parent resource's console URL — sharing
-// one Resource keeps that behavior in a single BrowserURL implementation.
-// Map keys are canonical Name() values; aliases (e.g. "dynamodb" on ddbKind)
-// would confuse kind.All()'s dedupe.
+// SQS-peek and DDB index/scan get their own Resources rather than sharing
+// with the parent: BrowserURL is a passthrough (the AWS console collapses
+// these views onto the parent's URL), but FooterItem must differ
+// ("messages", "indexes", "items" vs. "queues", "tables").
 var resourceRegistryName = map[kind]string{
 	LambdaKind:            "lambda",
 	SQSKind:               "sqs",
-	SQSPeekKind:           "sqs",
+	SQSPeekKind:           "sqs-messages",
 	DynamoDBKind:          "ddb",
-	DynamoDBIndexKind:     "ddb",
-	DynamoDBScanKind:      "ddb",
+	DynamoDBIndexKind:     "ddb-indexes",
+	DynamoDBScanKind:      "ddb-items",
 	ClusterKind:           "clusters",
 	ServiceKind:           "services",
 	TaskKind:              "tasks",
