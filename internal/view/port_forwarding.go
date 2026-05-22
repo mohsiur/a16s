@@ -30,7 +30,7 @@ func (v *view) portForwardingForm() (*tview.Form, *string) {
 	placeHolderPort := "8080"
 	placeHolderLocalPort := "8080"
 
-	td, err := v.app.Clients.DescribeTaskDefinition(v.app.task.TaskDefinitionArn)
+	td, err := v.app.Clients.DescribeTaskDefinition(v.app.Task().TaskDefinitionArn)
 	if err != nil {
 		return nil, nil
 	}
@@ -77,7 +77,7 @@ func (v *view) portForwardingForm() (*tview.Form, *string) {
 
 	// handle form submit
 	f.AddButton("Start", func() {
-		taskArn := strings.Split(*v.app.task.TaskArn, "/")
+		taskArn := strings.Split(*v.app.Task().TaskArn, "/")
 		clusterName := taskArn[1]
 		taskId := taskArn[2]
 		runtimeId := *selected.container.RuntimeId
@@ -145,7 +145,7 @@ func (v *view) terminatePortForwardingForm() (*tview.Form, *string) {
 
 	// container name
 	name := *selected.container.Name
-	clusterName := *v.app.cluster.ClusterName
+	clusterName := *v.app.Cluster().ClusterName
 	containerId := fmt.Sprintf("%s.%s", clusterName, name)
 	ports := []string{}
 	sessionIds := []*string{}
