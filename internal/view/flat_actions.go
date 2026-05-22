@@ -144,7 +144,8 @@ func (v *view) openSQSMessageBody() {
 // DynamoDBScanKind page handles tabular display for scans.)
 func (v *view) queryDDBIndex() {
 	selected, err := v.getCurrentSelection()
-	if err != nil || selected.ddbIndex == nil || v.app.ddbTable == nil {
+	table := v.app.DDBTable()
+	if err != nil || selected.ddbIndex == nil || table == nil {
 		v.app.Notice.Warn("no index selected")
 		return
 	}
@@ -153,7 +154,7 @@ func (v *view) queryDDBIndex() {
 		v.app.Notice.Warn("index has no partition key")
 		return
 	}
-	tableName := aws.ToString(v.app.ddbTable.TableName)
+	tableName := aws.ToString(table.TableName)
 
 	prompt := tview.NewInputField().
 		SetLabel(idx.partitionKey + " = ").

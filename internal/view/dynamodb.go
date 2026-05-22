@@ -566,7 +566,8 @@ func newDDBIndexView(tableName string, indexes []ddbIndex, app *App) *ddbIndexVi
 
 func (app *App) showTableIndexesPage(reload bool) error {
 	app.kind = DynamoDBIndexKind
-	if app.ddbTable == nil {
+	table := app.DDBTable()
+	if table == nil {
 		app.Notice.Warn("no table selected")
 		app.back()
 		return nil
@@ -574,8 +575,8 @@ func (app *App) showTableIndexesPage(reload bool) error {
 	if switched := app.switchPage(reload); switched {
 		return nil
 	}
-	tableName := aws.ToString(app.ddbTable.TableName)
-	indexes := collectIndexes(app.ddbTable)
+	tableName := aws.ToString(table.TableName)
+	indexes := collectIndexes(table)
 	return buildResourcePage(indexes, app, nil, func() resourceViewBuilder {
 		return newDDBIndexView(tableName, indexes, app)
 	})
@@ -707,7 +708,9 @@ func newDDBScanView(tableName, indexName, partitionKey, sortKey string, items []
 
 func (app *App) showIndexItemsPage(reload bool) error {
 	app.kind = DynamoDBScanKind
-	if app.ddbTable == nil || app.ddbIndex == nil {
+	table := app.DDBTable()
+	idx := app.DDBIndex()
+	if table == nil || idx == nil {
 		app.Notice.Warn("no index selected")
 		app.back()
 		return nil
@@ -715,10 +718,10 @@ func (app *App) showIndexItemsPage(reload bool) error {
 	if switched := app.switchPage(reload); switched {
 		return nil
 	}
-	tableName := aws.ToString(app.ddbTable.TableName)
-	indexName := app.ddbIndex.name
-	pk := app.ddbIndex.partitionKey
-	sk := app.ddbIndex.sortKey
+	tableName := aws.ToString(table.TableName)
+	indexName := idx.name
+	pk := idx.partitionKey
+	sk := idx.sortKey
 	items, err := app.Clients.ScanIndexFirstPage(context.Background(), tableName, indexName, 25)
 	return buildResourcePage(items, app, err, func() resourceViewBuilder {
 		return newDDBScanView(tableName, indexName, pk, sk, items, app)
