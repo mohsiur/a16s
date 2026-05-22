@@ -345,6 +345,104 @@ func TestIsFlatLeaf_DrivenByTraits(t *testing.T) {
 	}
 }
 
+// TestPageHandle_DrivenByResource pins that getPageHandle reads through
+// Resource.PageHandle (the parent context segment) before falling back to
+// the legacy app-state switch. The parent kinds are mirrored into the
+// registry, so every leaf with a parent should produce its scoped page key
+// without consulting app.cluster / app.service / app.task / app.sqsQueueName.
+func TestPageHandle_DrivenByResource(t *testing.T) {
+	ck := getClusterKind()
+	sk := getServiceKind()
+	tk := getTaskKind()
+	if ck == nil || sk == nil || tk == nil {
+		t.Fatal("ECS chain kinds not registered")
+	}
+	t.Cleanup(func() { ck.Reset(); sk.Reset(); tk.Reset() })
+
+	clusterArn := "arn:aws:ecs:us-east-1:111111111111:cluster/c1"
+	serviceArn := "arn:aws:ecs:us-east-1:111111111111:service/c1/s1"
+	taskArn := "arn:aws:ecs:us-east-1:111111111111:task/c1/abc"
+	ck.SetSelection(&ecsTypes.Cluster{ClusterArn: aws.String(clusterArn)})
+	sk.SetSelection(&ecsTypes.Service{ServiceArn: aws.String(serviceArn)})
+	tk.SetSelection(&ecsTypes.Task{TaskArn: aws.String(taskArn)})
+
+	cases := []struct {
+		k    kind
+		want string
+	}{
+		{ServiceKind, clusterArn},
+		{TaskKind, serviceArn},
+		{ContainerKind, taskArn},
+		{TaskDefinitionKind, serviceArn},
+		{ServiceDeploymentKind, serviceArn},
+	}
+	for _, c := range cases {
+		r := resolveResource(c.k)
+		if r == nil {
+			t.Errorf("%v: resource not registered", c.k)
+			continue
+		}
+		if got := r.PageHandle(); got != c.want {
+			t.Errorf("PageHandle(%v) = %q; want %q (read from registry)", c.k, got, c.want)
+		}
+	}
+}
+
+// TestPageHandle_EmptyWithoutParent pins that PageHandle returns "" when
+// the parent kind's selection is missing. The host treats empty as
+// "kind has no parent context" and that's what every drilldown leaf
+// expects on first paint before any selection has been mirrored.
+func TestPageHandle_EmptyWithoutParent(t *testing.T) {
+	for _, k := range []kind{ServiceKind, TaskKind, ContainerKind, TaskDefinitionKind, ServiceDeploymentKind, SQSPeekKind, DynamoDBIndexKind, DynamoDBScanKind} {
+		r := resolveResource(k)
+		if r == nil {
+			t.Errorf("%v: resource not registered", k)
+			continue
+		}
+		// Reset upstream selections so PageHandle has nothing to read.
+		kindpkg.ResetAll()
+		if got := r.PageHandle(); got != "" {
+			t.Errorf("PageHandle(%v) = %q; want empty (no parent selection)", k, got)
+		}
+	}
+}
+
+// TestRefresherSatisfaction pins that the kinds with cached inventory
+// (Lambda, SQS, DDB) implement Refresher so the auto-refresh ticker can
+// pre-warm them off the tview event loop. Removing Refresh from these
+// would silently regress refresh latency back to in-loop blocking — this
+// test makes that regression a build failure.
+func TestRefresherSatisfaction(t *testing.T) {
+	for _, k := range []kind{LambdaKind, SQSKind, DynamoDBKind} {
+		r := resolveResource(k)
+		if r == nil {
+			t.Errorf("%v: resource not registered", k)
+			continue
+		}
+		if _, ok := r.(kindpkg.Refresher); !ok {
+			t.Errorf("%v: does not implement Refresher; auto-refresh would block tview event loop", k)
+		}
+	}
+}
+
+// TestRefresherNotSatisfied pins that leaves and ECS chain kinds DON'T
+// implement Refresher. Leaves (SQSPeek, DDBIndex, DDBScan) refetch through
+// their parent's cache; ECS kinds (cluster/service/task/container/td/sd)
+// fetch synchronously inside their show*Page. Adding Refresh to one of
+// these would cause double-fetching during auto-refresh.
+func TestRefresherNotSatisfied(t *testing.T) {
+	for _, k := range []kind{SQSPeekKind, DynamoDBIndexKind, DynamoDBScanKind, ClusterKind, ServiceKind, TaskKind, ContainerKind, TaskDefinitionKind, ServiceDeploymentKind} {
+		r := resolveResource(k)
+		if r == nil {
+			t.Errorf("%v: resource not registered", k)
+			continue
+		}
+		if _, ok := r.(kindpkg.Refresher); ok {
+			t.Errorf("%v: implements Refresher but should not — would double-fetch with parent or ECS show*Page", k)
+		}
+	}
+}
+
 // TestResourceShow_OverriddenByMigratedKinds pins that every kind whose
 // Show() is dispatched by showPrimaryKindPage actually overrides the
 // BaseKind default. If a kind embeds BaseKind without supplying its own

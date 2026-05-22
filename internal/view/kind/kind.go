@@ -25,10 +25,11 @@ type Resource interface {
 	// host should fall back to its legacy lookup.
 	Title() string
 
-	// PageHandle returns the unique page key this kind uses for tview.Pages
-	// given the current selection (cluster ARN, queue name, table name, ...).
-	// Empty when the kind has no parent context.
-	PageHandle(selection any) string
+	// PageHandle returns the parent-context segment of the tview.Pages key
+	// for this kind, reading from the cached selection on this kind's
+	// parents in the registry. Empty when the kind has no parent context.
+	// The host appends the result after the kind's name.
+	PageHandle() string
 
 	// Show mounts the kind's primary list page on host. reload forces a
 	// fresh inventory fetch even when a cache is warm.
@@ -46,10 +47,6 @@ type Resource interface {
 	// Drilldown returns the kind navigated to when the user presses Enter
 	// on a row. nil when the kind is a leaf.
 	Drilldown() Resource
-
-	// BackTo returns the kind navigated to when the user presses Esc/back.
-	// nil falls through to the registry's default back chain.
-	BackTo() Resource
 
 	// FooterItem describes the kind's footer summary row.
 	FooterItem() FooterItem
@@ -107,12 +104,11 @@ type Host interface {
 type BaseKind struct{}
 
 func (BaseKind) Title() string                      { return "" }
-func (BaseKind) PageHandle(any) string              { return "" }
+func (BaseKind) PageHandle() string                 { return "" }
 func (BaseKind) Show(Host, bool) error              { return ErrShowUnimplemented }
 func (BaseKind) DescribePayload() any               { return nil }
 func (BaseKind) BrowserURL(string) (string, error)  { return "", nil }
 func (BaseKind) Drilldown() Resource                { return nil }
-func (BaseKind) BackTo() Resource                   { return nil }
 func (BaseKind) FooterItem() FooterItem             { return FooterItem{} }
 func (BaseKind) Traits() Traits                     { return Traits{} }
 func (BaseKind) Actions() []Action                  { return nil }

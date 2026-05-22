@@ -51,6 +51,15 @@ type Preloader interface {
 	Preload(app App)
 }
 
+// Refresher is an optional companion interface a Kind can implement to be
+// pre-warmed by the auto-refresh ticker. The host calls Refresh off the
+// tview event loop so the AWS round-trip never blocks scroll input; the
+// implementation should reload its cached inventory in place. Kinds without
+// a cache (the ECS chain) skip this and fetch synchronously inside Show.
+type Refresher interface {
+	Refresh(app App) error
+}
+
 // PreloadAll fans out Preload across every registered Kind that opts in.
 // Each Preload runs in its own goroutine; this function does not wait. Call
 // from app startup right after AWS config resolves.

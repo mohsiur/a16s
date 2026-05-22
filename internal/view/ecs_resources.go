@@ -91,6 +91,15 @@ func (k *serviceKind) FooterItem() kindpkg.FooterItem {
 	return kindpkg.FooterItem{Label: "services"}
 }
 
+// PageHandle returns the parent cluster's ARN so service pages stay scoped
+// to the active cluster.
+func (k *serviceKind) PageHandle() string {
+	if ck := getClusterKind(); ck != nil && ck.selected != nil && ck.selected.ClusterArn != nil {
+		return *ck.selected.ClusterArn
+	}
+	return ""
+}
+
 func getServiceKind() *serviceKind {
 	k, ok := kindpkg.Get("services")
 	if !ok {
@@ -135,6 +144,15 @@ func (k *taskKind) BrowserURL(_ string) (string, error) {
 }
 func (k *taskKind) FooterItem() kindpkg.FooterItem {
 	return kindpkg.FooterItem{Label: "tasks"}
+}
+
+// PageHandle returns the parent service's ARN so task pages stay scoped to
+// the active service.
+func (k *taskKind) PageHandle() string {
+	if sk := getServiceKind(); sk != nil && sk.selected != nil && sk.selected.ServiceArn != nil {
+		return *sk.selected.ServiceArn
+	}
+	return ""
 }
 
 func getTaskKind() *taskKind {
@@ -182,6 +200,15 @@ func (k *containerKind) FooterItem() kindpkg.FooterItem {
 	return kindpkg.FooterItem{Label: "containers"}
 }
 
+// PageHandle returns the parent task's ARN so container pages stay scoped
+// to the active task.
+func (k *containerKind) PageHandle() string {
+	if tk := getTaskKind(); tk != nil && tk.selected != nil && tk.selected.TaskArn != nil {
+		return *tk.selected.TaskArn
+	}
+	return ""
+}
+
 func getContainerKind() *containerKind {
 	k, ok := kindpkg.Get("containers")
 	if !ok {
@@ -215,6 +242,15 @@ func (k *taskDefinitionKind) FooterItem() kindpkg.FooterItem {
 	return kindpkg.FooterItem{Label: "task definitions"}
 }
 
+// PageHandle returns the parent service's ARN so task-definition pages stay
+// scoped to the active service.
+func (k *taskDefinitionKind) PageHandle() string {
+	if sk := getServiceKind(); sk != nil && sk.selected != nil && sk.selected.ServiceArn != nil {
+		return *sk.selected.ServiceArn
+	}
+	return ""
+}
+
 func getTaskDefinitionKind() *taskDefinitionKind {
 	k, ok := kindpkg.Get("task-definitions")
 	if !ok {
@@ -246,6 +282,15 @@ func (k *serviceDeploymentKind) BrowserURL(_ string) (string, error) {
 }
 func (k *serviceDeploymentKind) FooterItem() kindpkg.FooterItem {
 	return kindpkg.FooterItem{Label: "service deployments"}
+}
+
+// PageHandle returns the parent service's ARN so service-deployment pages
+// stay scoped to the active service.
+func (k *serviceDeploymentKind) PageHandle() string {
+	if sk := getServiceKind(); sk != nil && sk.selected != nil && sk.selected.ServiceArn != nil {
+		return *sk.selected.ServiceArn
+	}
+	return ""
 }
 
 func getServiceDeploymentKind() *serviceDeploymentKind {
