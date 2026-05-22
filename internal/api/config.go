@@ -11,7 +11,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/account"
-	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	regionsLib "github.com/keidarcy/aws-regions/v3"
 )
 
@@ -30,12 +29,23 @@ func (store *Store) SwitchAwsConfig(profile string, region string) error {
 	// Update store with new configuration
 	store.Config = &cfg
 
-	// Reinitialize all clients with new configuration
-	store.ecs = ecs.NewFromConfig(cfg)
-	store.cloudwatch = nil     // Will be lazy-loaded with new config
-	store.cloudwatchlogs = nil // Will be lazy-loaded with new config
-	store.ssm = nil            // Will be lazy-loaded with new config
-	store.autoScaling = nil    // Will be lazy-loaded with new config
+	// Delegate the actual client swap to Clients (single source of truth);
+	// then mirror its post-switch state into the legacy Store fields so
+	// direct readers (cluster.go store.ecs, metrics.go store.cloudwatch, ...)
+	// pick up the new config on next access. PR-B will move readers onto
+	// Clients accessors and PR-C deletes these field shadows. Tests that
+	// build Store via struct literal don't run NewStore, so initialise
+	// clients lazily here.
+	if store.clients == nil {
+		store.clients = NewClients(cfg)
+	} else {
+		store.clients.SwitchConfig(cfg)
+	}
+	store.ecs = store.clients.ECS()
+	store.cloudwatch = nil
+	store.cloudwatchlogs = nil
+	store.ssm = nil
+	store.autoScaling = nil
 	store.account = nil
 	store.lambda = nil
 	store.sqs = nil
