@@ -110,6 +110,12 @@ func (k *lambdaKind) Preload(app kindpkg.App) {
 	_ = k.loadInventory(app, false)
 }
 
+// Refresh satisfies kindpkg.Refresher. Called off the tview event loop by
+// the auto-refresh ticker so the AWS round-trip never blocks scroll input.
+func (k *lambdaKind) Refresh(app kindpkg.App) error {
+	return k.loadInventory(app, true)
+}
+
 // loadInventory fetches the function list and caches the result. Concurrent
 // callers single-flight on k.loadDone. When reload is true, the cache is
 // invalidated before the fetch so refresh keys (`r`) and the auto-refresh

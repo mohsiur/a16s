@@ -135,6 +135,12 @@ func (k *sqsKind) Preload(app kindpkg.App) {
 	_ = k.loadInventory(app, false)
 }
 
+// Refresh satisfies kindpkg.Refresher. Called off the tview event loop by
+// the auto-refresh ticker so the AWS round-trip never blocks scroll input.
+func (k *sqsKind) Refresh(app kindpkg.App) error {
+	return k.loadInventory(app, true)
+}
+
 // loadInventory fetches the queue list + attributes and caches the result.
 // Concurrent callers single-flight on k.loadDone — the first caller runs the
 // fetch and closes the channel; subsequent callers (including Preload + a
@@ -329,6 +335,15 @@ func (k *sqsPeekKind) FooterItem() kindpkg.FooterItem {
 }
 func (k *sqsPeekKind) Traits() kindpkg.Traits {
 	return kindpkg.Traits{WideTable: true}
+}
+
+// PageHandle returns the parent queue's URL so message pages stay scoped to
+// the active queue.
+func (k *sqsPeekKind) PageHandle() string {
+	if sk := getSQSKind(); sk != nil {
+		return sk.selectedURL
+	}
+	return ""
 }
 
 func (v *sqsView) getViewAndFooter() (*view, *tview.TextView) {

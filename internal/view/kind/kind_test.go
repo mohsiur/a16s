@@ -20,8 +20,8 @@ var _ Resource = resourceStub{}
 func TestBaseKindDefaults(t *testing.T) {
 	var s resourceStub
 
-	if got := s.PageHandle(nil); got != "" {
-		t.Errorf("PageHandle = %q; want empty", got)
+	if got := s.PageHandle(); got != "" {
+		t.Errorf("PageHandle = %q; want empty (the BaseKind default)", got)
 	}
 	if err := s.Show(nil, false); !errors.Is(err, ErrShowUnimplemented) {
 		t.Errorf("Show err = %v; want ErrShowUnimplemented (the BaseKind default — embedding kinds override Show)", err)
@@ -35,9 +35,6 @@ func TestBaseKindDefaults(t *testing.T) {
 	}
 	if got := s.Drilldown(); got != nil {
 		t.Errorf("Drilldown = %v; want nil", got)
-	}
-	if got := s.BackTo(); got != nil {
-		t.Errorf("BackTo = %v; want nil", got)
 	}
 	if got := s.FooterItem(); got != (FooterItem{}) {
 		t.Errorf("FooterItem = %#v; want zero", got)

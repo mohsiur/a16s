@@ -202,6 +202,12 @@ func (k *ddbKind) Preload(app kindpkg.App) {
 	_ = k.loadInventory(app, false)
 }
 
+// Refresh satisfies kindpkg.Refresher. Called off the tview event loop by
+// the auto-refresh ticker so the AWS round-trip never blocks scroll input.
+func (k *ddbKind) Refresh(app kindpkg.App) error {
+	return k.loadInventory(app, true)
+}
+
 // loadInventory fetches the table list + descriptions and caches the result.
 // Concurrent callers single-flight on k.loadDone — the first caller runs the
 // fetch and closes the channel; subsequent callers (including Preload + a
@@ -362,15 +368,25 @@ func getDDBKind() *ddbKind {
 // scan-items leaf pages. BrowserURL delegates to the parent ddbKind (the AWS
 // console collapses both views onto the parent table's URL); FooterItem
 // returns the leaf-specific label.
+//
+// ddbIndexKind tracks the selected index so ddbScanKind can read it for
+// PageHandle (the scan page is keyed by `<tableName>.<indexName>`). Set in
+// changeSelectedValues alongside app.ddbIndex; cleared on profile/region
+// switch via Reset.
 type ddbIndexKind struct {
 	kindpkg.BaseKind
+	selected *ddbIndex
 }
 
-func (k *ddbIndexKind) Name() string     { return "ddb-indexes" }
-func (k *ddbIndexKind) Title() string    { return "indexes" }
-func (k *ddbIndexKind) Reset()           {}
-func (k *ddbIndexKind) Selection() any   { return nil }
-func (k *ddbIndexKind) SetSelection(any) {}
+func (k *ddbIndexKind) Name() string   { return "ddb-indexes" }
+func (k *ddbIndexKind) Title() string  { return "indexes" }
+func (k *ddbIndexKind) Reset()         { k.selected = nil }
+func (k *ddbIndexKind) Selection() any { return k.selected }
+func (k *ddbIndexKind) SetSelection(s any) {
+	if idx, ok := s.(*ddbIndex); ok {
+		k.selected = idx
+	}
+}
 
 func (k *ddbIndexKind) Show(host kindpkg.Host, reload bool) error {
 	if app, ok := host.(*App); ok {
@@ -386,6 +402,15 @@ func (k *ddbIndexKind) BrowserURL(region string) (string, error) {
 }
 func (k *ddbIndexKind) FooterItem() kindpkg.FooterItem {
 	return kindpkg.FooterItem{Label: "indexes"}
+}
+
+// PageHandle returns the parent table's name so index pages stay scoped to
+// the active table.
+func (k *ddbIndexKind) PageHandle() string {
+	if dk := getDDBKind(); dk != nil && dk.selected != nil {
+		return aws.ToString(dk.selected.TableName)
+	}
+	return ""
 }
 
 type ddbScanKind struct {
@@ -415,6 +440,27 @@ func (k *ddbScanKind) FooterItem() kindpkg.FooterItem {
 }
 func (k *ddbScanKind) Traits() kindpkg.Traits {
 	return kindpkg.Traits{WideTable: true}
+}
+
+// PageHandle returns "<tableName>.<indexName>" so scan pages stay scoped to
+// the active (table, index) pair. Mirrors the legacy switch in
+// app.getPageHandle.
+func (k *ddbScanKind) PageHandle() string {
+	dk := getDDBKind()
+	ik := getDDBIndexKind()
+	if dk == nil || ik == nil || dk.selected == nil || ik.selected == nil {
+		return ""
+	}
+	return aws.ToString(dk.selected.TableName) + "." + ik.selected.name
+}
+
+func getDDBIndexKind() *ddbIndexKind {
+	k, ok := kindpkg.Get("ddb-indexes")
+	if !ok {
+		return nil
+	}
+	ik, _ := k.(*ddbIndexKind)
+	return ik
 }
 
 func (v *ddbView) getViewAndFooter() (*view, *tview.TextView) {

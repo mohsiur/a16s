@@ -293,25 +293,37 @@ func (app *App) back() {
 	app.Pages.SwitchToPage(pageName)
 }
 
-// Get page handler, cluster is empty, other is cluster arn
+// Get page handler, cluster is empty, other is cluster arn.
+//
+// Migrated kinds answer through Resource.PageHandle (read from the
+// registry's cached parent selection); a non-empty result short-circuits the
+// legacy switch. The TaskKind status suffix and fromCluster suffix still
+// run unconditionally because they're cross-cutting page-keying concerns
+// (the same kind shows under different page names depending on app state),
+// not parent-context derivation.
 func (app *App) getPageHandle() string {
 	name := ""
-	switch app.kind {
-	case ServiceKind:
-		name = *app.cluster.ClusterArn
-	case TaskKind, TaskDefinitionKind, ServiceDeploymentKind:
-		name = *app.service.ServiceArn
-	case ContainerKind:
-		name = *app.task.TaskArn
-	case SQSPeekKind:
-		name = app.Entity.sqsQueueName
-	case DynamoDBIndexKind:
-		if app.Entity.ddbTable != nil {
-			name = aws.ToString(app.Entity.ddbTable.TableName)
-		}
-	case DynamoDBScanKind:
-		if app.Entity.ddbTable != nil && app.Entity.ddbIndex != nil {
-			name = aws.ToString(app.Entity.ddbTable.TableName) + "." + app.Entity.ddbIndex.name
+	if r := resolveResource(app.kind); r != nil {
+		name = r.PageHandle()
+	}
+	if name == "" {
+		switch app.kind {
+		case ServiceKind:
+			name = *app.cluster.ClusterArn
+		case TaskKind, TaskDefinitionKind, ServiceDeploymentKind:
+			name = *app.service.ServiceArn
+		case ContainerKind:
+			name = *app.task.TaskArn
+		case SQSPeekKind:
+			name = app.Entity.sqsQueueName
+		case DynamoDBIndexKind:
+			if app.Entity.ddbTable != nil {
+				name = aws.ToString(app.Entity.ddbTable.TableName)
+			}
+		case DynamoDBScanKind:
+			if app.Entity.ddbTable != nil && app.Entity.ddbIndex != nil {
+				name = aws.ToString(app.Entity.ddbTable.TableName) + "." + app.Entity.ddbIndex.name
+			}
 		}
 	}
 	// based on different task status different name
@@ -387,24 +399,17 @@ func (app *App) start() error {
 
 // preheatKindForRefresh runs the inventory fetch for kind k off the tview
 // event loop so the auto-refresh ticker doesn't block scroll input behind a
-// multi-second AWS round-trip. Only flat kinds with a kindpkg cache are
-// handled — ECS kinds fetch inside their show*Page and the inventories are
-// small enough that the inline stutter is tolerable. No-op when the kind
-// has no preheatable cache.
+// multi-second AWS round-trip. Kinds opt in by implementing
+// kindpkg.Refresher; ECS kinds fetch inside their show*Page and the
+// inventories are small enough that the inline stutter is tolerable, so
+// they don't satisfy the interface and this is a no-op for them.
 func (app *App) preheatKindForRefresh(k kind) {
-	switch k {
-	case LambdaKind:
-		if lk := getLambdaKind(); lk != nil {
-			_ = lk.loadInventory(app, true)
-		}
-	case SQSKind:
-		if sk := getSQSKind(); sk != nil {
-			_ = sk.loadInventory(app, true)
-		}
-	case DynamoDBKind:
-		if dk := getDDBKind(); dk != nil {
-			_ = dk.loadInventory(app, true)
-		}
+	r := resolveResource(k)
+	if r == nil {
+		return
+	}
+	if rf, ok := r.(kindpkg.Refresher); ok {
+		_ = rf.Refresh(app)
 	}
 }
 

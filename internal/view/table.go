@@ -588,6 +588,9 @@ func (v *view) changeSelectedValues() {
 		if selected.ddbIndex != nil {
 			v.app.ddbIndex = selected.ddbIndex
 			v.app.entityName = selected.entityName
+			if ik := getDDBIndexKind(); ik != nil {
+				ik.SetSelection(selected.ddbIndex)
+			}
 		} else {
 			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
 			return
