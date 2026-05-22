@@ -85,6 +85,11 @@ type Traits struct {
 	Refreshable bool
 	Drillable   bool
 	Browsable   bool
+	// WideTable reports whether the kind's primary list page is a flat
+	// table with many columns the user wants to horizontally scroll. The
+	// host swaps arrow-key handling on these pages: arrows pass through to
+	// tview to move the column offset rather than the row.
+	WideTable bool
 }
 
 // Host is the surface a Resource needs during Show. It embeds App so

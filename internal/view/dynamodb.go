@@ -413,6 +413,9 @@ func (k *ddbScanKind) BrowserURL(region string) (string, error) {
 func (k *ddbScanKind) FooterItem() kindpkg.FooterItem {
 	return kindpkg.FooterItem{Label: "items"}
 }
+func (k *ddbScanKind) Traits() kindpkg.Traits {
+	return kindpkg.Traits{WideTable: true}
+}
 
 func (v *ddbView) getViewAndFooter() (*view, *tview.TextView) {
 	return &v.view, v.footer.middle
