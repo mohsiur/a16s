@@ -4,6 +4,7 @@ import (
 	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	s3Types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 // Typed selection accessors backed by the kindpkg registry.
@@ -101,6 +102,14 @@ func (app *App) DDBTable() *ddbTypes.TableDescription {
 // secondary index), or nil when none.
 func (app *App) DDBIndex() *ddbIndex {
 	if k := getDDBIndexKind(); k != nil {
+		return k.selected
+	}
+	return nil
+}
+
+// S3Bucket returns the active S3 bucket selection, or nil when none.
+func (app *App) S3Bucket() *s3Types.Bucket {
+	if k := getS3Kind(); k != nil {
 		return k.selected
 	}
 	return nil

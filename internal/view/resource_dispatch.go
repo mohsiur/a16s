@@ -80,6 +80,10 @@ func selectionFromEntity(k kind, e Entity) any {
 		if e.ddbIndex != nil {
 			return e.ddbIndex
 		}
+	case S3Kind:
+		if e.s3Bucket != nil {
+			return e.s3Bucket
+		}
 	}
 	return nil
 }

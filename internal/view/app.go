@@ -14,6 +14,7 @@ import (
 	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	s3Types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	sqsTypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/gdamore/tcell/v2"
 	"github.com/mohsiur/a16s/internal/api"
@@ -63,6 +64,7 @@ type Entity struct {
 	sqsMessage     *sqsTypes.Message
 	ddbTable       *ddbTypes.TableDescription
 	ddbIndex       *ddbIndex
+	s3Bucket       *s3Types.Bucket
 }
 
 type Option struct {

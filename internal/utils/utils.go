@@ -165,6 +165,19 @@ func DynamoDBTableURL(region, table string) string {
 	return fmt.Sprintf("https://%s.console.aws.amazon.com/dynamodbv2/home?region=%s#table?name=%s", region, region, table)
 }
 
+// S3BucketURL builds the AWS console URL for an S3 bucket. S3 buckets are
+// global, so the console URL is region-prefixed only for the host — the
+// objects view itself is not regional. Returns "" when bucket is empty.
+func S3BucketURL(region, bucket string) string {
+	if bucket == "" {
+		return ""
+	}
+	if region == "" {
+		region = "us-east-1"
+	}
+	return fmt.Sprintf("https://%s.console.aws.amazon.com/s3/buckets/%s", region, url.QueryEscape(bucket))
+}
+
 func OpenURL(url string) error {
 	var err error
 

@@ -260,6 +260,8 @@ func (v *view) getJsonString(entity Entity) (string, []byte, error) {
 	case entity.sqsQueueName != "" && v.app.kind == SQSKind:
 		// SQS describe = the cached attribute map for the selected queue.
 		data = sqsDescribeData(v, entity)
+	case entity.s3Bucket != nil && v.app.kind == S3Kind:
+		data = entity.s3Bucket
 	case entity.metrics != nil:
 		data = entity.metrics
 	case entity.autoScaling != nil:
