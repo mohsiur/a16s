@@ -1,6 +1,9 @@
 package kind
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 // resourceStub embeds BaseKind so it inherits the wider defaults, then
 // implements only the narrow Kind methods. If BaseKind ever stops covering
@@ -20,8 +23,8 @@ func TestBaseKindDefaults(t *testing.T) {
 	if got := s.PageHandle(nil); got != "" {
 		t.Errorf("PageHandle = %q; want empty", got)
 	}
-	if err := s.Show(nil, false); err != nil {
-		t.Errorf("Show err = %v; want nil", err)
+	if err := s.Show(nil, false); !errors.Is(err, ErrShowUnimplemented) {
+		t.Errorf("Show err = %v; want ErrShowUnimplemented (the BaseKind default — embedding kinds override Show)", err)
 	}
 	if got := s.DescribePayload(); got != nil {
 		t.Errorf("DescribePayload = %v; want nil", got)

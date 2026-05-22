@@ -32,6 +32,11 @@ const (
 )
 
 func (k kind) String() string {
+	if r := resolveResource(k); r != nil {
+		if t := r.Title(); t != "" {
+			return t
+		}
+	}
 	switch k {
 	case ClusterKind:
 		return "clusters"

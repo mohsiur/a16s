@@ -1,5 +1,13 @@
 package kind
 
+import "errors"
+
+// ErrShowUnimplemented is returned by BaseKind.Show to signal that the
+// embedding kind has not overridden Show. Callers (the host's primary-page
+// dispatcher) treat this as "fall back to the legacy code path" rather than
+// surfacing it as a real error.
+var ErrShowUnimplemented = errors.New("kind: Show not implemented")
+
 // Resource is the wider interface kinds migrate to as the refactor lands.
 // It embeds the narrow Kind so a kind that satisfies Resource is also
 // registry-compatible.
@@ -11,6 +19,11 @@ package kind
 // BaseKind to fill the rest.
 type Resource interface {
 	Kind
+
+	// Title returns the human-readable plural display name shown in
+	// breadcrumbs and the "Viewing X..." notice. Empty string means the
+	// host should fall back to its legacy lookup.
+	Title() string
 
 	// PageHandle returns the unique page key this kind uses for tview.Pages
 	// given the current selection (cluster ARN, queue name, table name, ...).
@@ -88,8 +101,9 @@ type Host interface {
 // and have no sensible default.
 type BaseKind struct{}
 
+func (BaseKind) Title() string                      { return "" }
 func (BaseKind) PageHandle(any) string              { return "" }
-func (BaseKind) Show(Host, bool) error              { return nil }
+func (BaseKind) Show(Host, bool) error              { return ErrShowUnimplemented }
 func (BaseKind) DescribePayload() any               { return nil }
 func (BaseKind) BrowserURL(string) (string, error)  { return "", nil }
 func (BaseKind) Drilldown() Resource                { return nil }

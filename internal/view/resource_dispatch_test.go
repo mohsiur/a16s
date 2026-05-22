@@ -1,6 +1,7 @@
 package view
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -286,5 +287,55 @@ func TestDDBKind_BrowserURL(t *testing.T) {
 	want := "https://us-east-1.console.aws.amazon.com/dynamodbv2/home?region=us-east-1#table?name=my-table"
 	if got != want {
 		t.Errorf("BrowserURL = %q; want %q", got, want)
+	}
+}
+
+// TestKindString_PrefersResourceTitle pins that kind.String() consults
+// Resource.Title() before falling through to the enum switch. Adding a new
+// migrated kind should let it pick its own display name without editing the
+// enum's String() method — that's the contract Phase 4.5 created.
+func TestKindString_PrefersResourceTitle(t *testing.T) {
+	cases := []struct {
+		k    kind
+		want string
+	}{
+		{LambdaKind, "lambdas"},
+		{SQSKind, "queues"},
+		{SQSPeekKind, "messages"},
+		{DynamoDBKind, "tables"},
+		{DynamoDBIndexKind, "indexes"},
+		{DynamoDBScanKind, "items"},
+	}
+	for _, c := range cases {
+		if got := c.k.String(); got != c.want {
+			t.Errorf("%v.String() = %q; want %q (via Resource.Title)", c.k, got, c.want)
+		}
+	}
+}
+
+// TestResourceShow_OverriddenByMigratedKinds pins that every kind whose
+// Show() is dispatched by showPrimaryKindPage actually overrides the
+// BaseKind default. If a kind embeds BaseKind without supplying its own
+// Show, the dispatcher would silently fall through to the legacy enum
+// switch — which for these kinds no longer has a case (we removed them in
+// Phase 4.5), so navigation would land in the ClusterKind default branch.
+func TestResourceShow_OverriddenByMigratedKinds(t *testing.T) {
+	migrated := []kind{
+		LambdaKind, SQSKind, SQSPeekKind,
+		DynamoDBKind, DynamoDBIndexKind, DynamoDBScanKind,
+	}
+	for _, k := range migrated {
+		r := resolveResource(k)
+		if r == nil {
+			t.Errorf("%v: resource not registered", k)
+			continue
+		}
+		// nil host: every migrated Show is gated on a *App type assertion
+		// and returns nil when the assertion fails. The point is that it
+		// must NOT return ErrShowUnimplemented — that would mean the kind
+		// inherited BaseKind.Show and the dispatcher would fall through.
+		if err := r.Show(nil, false); errors.Is(err, kindpkg.ErrShowUnimplemented) {
+			t.Errorf("%v.Show returned ErrShowUnimplemented; want override (BaseKind default leaks through)", k)
+		}
 	}
 }
