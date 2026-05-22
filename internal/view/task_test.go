@@ -31,17 +31,11 @@ func getTaskViews() []taskView {
 	task2.TaskArn = aws.String(taskArn2)
 
 	app, _ := newApp(Option{})
-	app.cluster = &types.Cluster{
-		ClusterName: aws.String(clusterName1),
-	}
-	app.service = &types.Service{
-		ServiceName: aws.String(serviceName1),
-	}
 	if k := getClusterKind(); k != nil {
-		k.SetSelection(app.cluster)
+		k.SetSelection(&types.Cluster{ClusterName: aws.String(clusterName1)})
 	}
 	if k := getServiceKind(); k != nil {
-		k.SetSelection(app.service)
+		k.SetSelection(&types.Service{ServiceName: aws.String(serviceName1)})
 	}
 	TaskView1 := newTaskView([]types.Task{task1}, app)
 	TaskView2 := newTaskView([]types.Task{task2}, app)

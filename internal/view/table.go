@@ -429,176 +429,25 @@ func (v *view) handleDone(key tcell.Key) {
 	v.app.back()
 }
 
-// Handle common values changing for selected event for table when pressed Enter
+// Handle common values changing for selected event for table when pressed Enter.
+//
+// Mirrors the per-row Entity selection into the kindpkg registry so the
+// typed App accessors (Cluster(), Service(), ...) and BrowserURL/PageHandle
+// implementations see the active row. Kinds without a registry entry
+// (ProfileKind, RegionKind, InstanceKind, leaf scan/peek pages) are no-ops
+// here; their UX state is read from the per-row Entity directly.
 func (v *view) changeSelectedValues() {
 	selected, err := v.getCurrentSelection()
 	if err != nil {
 		v.app.Notice.Warnf("failed to changeSelectedValues")
 		return
 	}
-	switch v.app.kind {
-	case ProfileKind:
-		profile := selected.profile
-		if profile != "" {
-			v.app.profile = profile
-			v.app.entityName = profile
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case RegionKind:
-		region := selected.region
-		if region != nil {
-			v.app.region = region
-			v.app.entityName = region.Code
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case ClusterKind:
-		cluster := selected.cluster
-		if cluster != nil {
-			v.app.cluster = cluster
-			v.app.entityName = *cluster.ClusterArn
-			if ck := getClusterKind(); ck != nil {
-				ck.SetSelection(cluster)
-			}
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case ServiceKind:
-		service := selected.service
-		if service != nil {
-			v.app.service = service
-			v.app.entityName = *service.ServiceArn
-			if sk := getServiceKind(); sk != nil {
-				sk.SetSelection(service)
-			}
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case TaskKind:
-		task := selected.task
-		if task != nil {
-
-			v.app.task = task
-			v.app.entityName = *task.TaskArn
-			if tk := getTaskKind(); tk != nil {
-				tk.SetSelection(task)
-			}
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case ContainerKind:
-		container := selected.container
-		if container != nil {
-			v.app.container = selected.container
-			v.app.entityName = *container.ContainerArn
-			if ck := getContainerKind(); ck != nil {
-				ck.SetSelection(container)
-			}
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case TaskDefinitionKind:
-		taskDefinition := selected.taskDefinition
-		if taskDefinition != nil {
-			v.app.taskDefinition = selected.taskDefinition
-			v.app.entityName = *taskDefinition.TaskDefinitionArn
-			if tdk := getTaskDefinitionKind(); tdk != nil {
-				tdk.SetSelection(taskDefinition)
-			}
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case ServiceDeploymentKind:
-		serviceDeployment := selected.serviceDeployment
-		if serviceDeployment != nil {
-			v.app.serviceDeployment = selected.serviceDeployment
-			v.app.entityName = *serviceDeployment.ServiceDeploymentArn
-			if sdk := getServiceDeploymentKind(); sdk != nil {
-				sdk.SetSelection(serviceDeployment)
-			}
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case InstanceKind:
-		instance := selected.instance
-		if instance != nil {
-			v.app.instance = selected.instance
-			v.app.entityName = *instance.ContainerInstanceArn
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case LambdaKind:
-		fn := selected.lambdaFunction
-		if fn != nil {
-			v.app.lambdaFunction = fn
-			v.app.entityName = selected.entityName
-			if lk := getLambdaKind(); lk != nil {
-				lk.SetSelection(fn)
-			}
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case SQSKind:
-		if selected.sqsQueueName != "" {
-			v.app.sqsQueueName = selected.sqsQueueName
-			v.app.entityName = selected.entityName
-			if sk := getSQSKind(); sk != nil {
-				sk.SetSelection(selected.sqsQueueName)
-			}
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case SQSPeekKind:
-		if selected.sqsMessage != nil {
-			v.app.sqsMessage = selected.sqsMessage
-			v.app.entityName = selected.entityName
-			// SQSPeek shares sqsKind for browser routing — make sure the cached
-			// queue selection matches the active page so `o` opens this queue.
-			if sk := getSQSKind(); sk != nil && v.app.sqsQueueName != "" {
-				sk.SetSelection(v.app.sqsQueueName)
-			}
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case DynamoDBKind:
-		if selected.ddbTable != nil {
-			v.app.ddbTable = selected.ddbTable
-			v.app.entityName = selected.entityName
-			if dk := getDDBKind(); dk != nil {
-				dk.SetSelection(selected.ddbTable)
-			}
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case DynamoDBIndexKind:
-		if selected.ddbIndex != nil {
-			v.app.ddbIndex = selected.ddbIndex
-			v.app.entityName = selected.entityName
-			if ik := getDDBIndexKind(); ik != nil {
-				ik.SetSelection(selected.ddbIndex)
-			}
-		} else {
-			slog.Warn("unexpected in changeSelectedValues", "kind", v.app.kind)
-			return
-		}
-	case DynamoDBScanKind:
-		v.app.entityName = selected.entityName
-	default:
-		v.app.back()
+	r := resolveResource(v.app.kind)
+	if r == nil {
+		return
+	}
+	if sel := selectionFromEntity(v.app.kind, selected); sel != nil {
+		r.SetSelection(sel)
 	}
 }
 

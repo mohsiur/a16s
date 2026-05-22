@@ -371,8 +371,8 @@ func getDDBKind() *ddbKind {
 //
 // ddbIndexKind tracks the selected index so ddbScanKind can read it for
 // PageHandle (the scan page is keyed by `<tableName>.<indexName>`). Set in
-// changeSelectedValues alongside app.ddbIndex; cleared on profile/region
-// switch via Reset.
+// changeSelectedValues via SetSelection; cleared on profile/region switch
+// via Reset.
 type ddbIndexKind struct {
 	kindpkg.BaseKind
 	selected *ddbIndex

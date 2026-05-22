@@ -269,7 +269,6 @@ func (app *App) showQueuesPage(reload bool) error {
 		// to the matching full URL before buildResourcePage seeds the cursor.
 		if full := sk.promoteSelectedURL(); full != "" {
 			sk.SetSelection(full)
-			app.sqsQueueName = full
 		}
 		sk.mu.RLock()
 		urls := append([]string(nil), sk.urls...)

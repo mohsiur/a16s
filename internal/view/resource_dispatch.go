@@ -24,3 +24,62 @@ func resolveResource(k kind) kindpkg.Resource {
 	res, _ := r.(kindpkg.Resource)
 	return res
 }
+
+// selectionFromEntity returns the selection value the kind's SetSelection
+// expects, picked out of the per-row Entity payload. Returning the right type
+// per kind keeps this map at the view layer (kindpkg can't import view, and
+// the Entity struct lives in view), so each kind's SetSelection stays
+// strongly-typed at the call site below.
+//
+// Kinds without a row-backed selection (Profile, Region, ddb scan leaf,
+// sqs-messages leaf) return nil so the dispatcher in changeSelectedValues
+// becomes a no-op for them.
+func selectionFromEntity(k kind, e Entity) any {
+	switch k {
+	case ClusterKind:
+		if e.cluster != nil {
+			return e.cluster
+		}
+	case ServiceKind:
+		if e.service != nil {
+			return e.service
+		}
+	case TaskKind:
+		if e.task != nil {
+			return e.task
+		}
+	case ContainerKind:
+		if e.container != nil {
+			return e.container
+		}
+	case TaskDefinitionKind:
+		if e.taskDefinition != nil {
+			return e.taskDefinition
+		}
+	case ServiceDeploymentKind:
+		if e.serviceDeployment != nil {
+			return e.serviceDeployment
+		}
+	case InstanceKind:
+		if e.instance != nil {
+			return e.instance
+		}
+	case LambdaKind:
+		if e.lambdaFunction != nil {
+			return e.lambdaFunction
+		}
+	case SQSKind:
+		if e.sqsQueueName != "" {
+			return e.sqsQueueName
+		}
+	case DynamoDBKind:
+		if e.ddbTable != nil {
+			return e.ddbTable
+		}
+	case DynamoDBIndexKind:
+		if e.ddbIndex != nil {
+			return e.ddbIndex
+		}
+	}
+	return nil
+}

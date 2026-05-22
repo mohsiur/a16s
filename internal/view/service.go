@@ -57,8 +57,6 @@ func (app *App) showServicesPage(reload bool) error {
 	if app.Option.Service != "" && !reload {
 		for _, s := range resources {
 			if *s.ServiceName == app.Option.Service {
-				app.service = &s
-				app.events = s.Events
 				if sk := getServiceKind(); sk != nil {
 					sk.SetSelection(&s)
 				}

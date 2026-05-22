@@ -141,8 +141,8 @@ func TestBuildResourcePage(t *testing.T) {
 		if v.table.GetRowCount() != 2 {
 			t.Errorf("RowCount Got: %d, Want: %d\n", v.table.GetRowCount(), 2)
 		}
-		if app.cluster == nil || aws.ToString(app.cluster.ClusterArn) != clusterArn1 {
-			t.Errorf("ClusterArn Got: %v, Want: %v\n", app.cluster, clusterArn1)
+		if c := app.Cluster(); c == nil || aws.ToString(c.ClusterArn) != clusterArn1 {
+			t.Errorf("ClusterArn Got: %v, Want: %v\n", app.Cluster(), clusterArn1)
 		}
 		footerText := footer.GetText(false)
 		if !strings.Contains(footerText, app.kind.String()) {

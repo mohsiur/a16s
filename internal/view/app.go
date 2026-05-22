@@ -29,7 +29,18 @@ var ErrHandledNavigation = errors.New("navigation already handled")
 var globalProfile string
 var globalRegion string
 
-// Entity contains ECS resources to show, use uppercase to make items like app.cluster easy to access
+// Entity is the per-row payload attached to each table cell as its
+// reference. Row builders populate the field that matches their kind
+// (cluster, service, task, ...); changeSelectedValues mirrors that
+// selection into the registry, and per-kind handlers read back through
+// `selected.X` (returned from getCurrentSelection) for the kind-specific
+// data they need on Enter, `d`, etc.
+//
+// This struct is *not* embedded on App anymore — App reads selections
+// through the typed accessors (App.Cluster(), App.Service(), ...) which
+// the registry backs. Adding a new kind here means: add the field, teach
+// `selectionFromEntity` to extract it, and the rest of the dispatch falls
+// out for free.
 type Entity struct {
 	cluster           *types.Cluster
 	service           *types.Service
@@ -45,8 +56,8 @@ type Entity struct {
 	profile           string
 	region            *api.Region
 	entityName        string
-	// Flat-kind selection state. Set by changeSelectedValues for the
-	// corresponding kind so drill-downs can read it without re-listing.
+	// Flat-kind selection state populated by row builders so drill-downs
+	// can read the parent selection through `selected.X` without re-listing.
 	lambdaFunction *lambdaTypes.FunctionConfiguration
 	sqsQueueName   string
 	sqsMessage     *sqsTypes.Message
@@ -80,8 +91,10 @@ type Option struct {
 }
 
 // App is the tview application root: it embeds tview.Application and
-// tview.Pages, owns the navigation/Notice surface, and holds the active
-// Entity selection state used across kind switches.
+// tview.Pages, owns the navigation/Notice surface, and routes user input
+// across kind switches. The active selection per kind lives in the
+// kindpkg registry — read it via App.Cluster(), App.Service(), and the
+// other typed accessors in app_accessors.go.
 type App struct {
 	// tview Application
 	*tview.Application
@@ -101,8 +114,6 @@ type App struct {
 	*api.Clients
 	// Option from cli args
 	Option
-	// Current screen item content, use uppercase to make items like app.cluster easy to access
-	Entity
 	// Current page primary kind ex: cluster, service
 	kind kind
 	// Current secondary kind like json, list
@@ -162,36 +173,13 @@ func newApp(option Option) (*App, error) {
 		mainScreen:       main,
 		mainScreenFooter: footer,
 		Clients:          clients,
-		Option:        option,
-		kind:          ClusterKind,
-		secondaryKind: EmptyKind,
-		backKind:      EmptyKind,
-		taskStatus:    types.DesiredStatusRunning,
-		ctx:           ctx,
-		cancel:        cancel,
-		Entity: Entity{
-			cluster: &types.Cluster{
-				ClusterName: aws.String("a16s_default_cluster"),
-				ClusterArn:  aws.String("a16s_default_cluster_arn"),
-			},
-			service: &types.Service{
-				ServiceName: aws.String("a16s_default_service"),
-				ServiceArn:  aws.String("a16s_default_service arn"),
-			},
-			task:           &types.Task{},
-			container:      &types.Container{},
-			taskDefinition: &types.TaskDefinition{},
-		},
-	}
-	// Mirror the placeholder selections into the registry so the typed
-	// accessors (Cluster(), Service(), ...) match the legacy fields on
-	// first paint. Both sources are kept in sync until Phase 4.7 PR-final
-	// drops the legacy fields entirely.
-	if ck := getClusterKind(); ck != nil {
-		ck.SetSelection(a.Entity.cluster)
-	}
-	if sk := getServiceKind(); sk != nil {
-		sk.SetSelection(a.Entity.service)
+		Option:           option,
+		kind:             ClusterKind,
+		secondaryKind:    EmptyKind,
+		backKind:          EmptyKind,
+		taskStatus:        types.DesiredStatusRunning,
+		ctx:               ctx,
+		cancel:            cancel,
 	}
 	return a, nil
 }
@@ -304,38 +292,16 @@ func (app *App) back() {
 	app.Pages.SwitchToPage(pageName)
 }
 
-// Get page handler, cluster is empty, other is cluster arn.
-//
-// Migrated kinds answer through Resource.PageHandle (read from the
-// registry's cached parent selection); a non-empty result short-circuits the
-// legacy switch. The TaskKind status suffix and fromCluster suffix still
-// run unconditionally because they're cross-cutting page-keying concerns
-// (the same kind shows under different page names depending on app state),
-// not parent-context derivation.
+// Get page handler. Each kind answers via Resource.PageHandle, which reads
+// the parent-context segment from its parent's cached selection in the
+// registry. The TaskKind status suffix and fromCluster suffix still run
+// unconditionally because they're cross-cutting page-keying concerns (the
+// same kind shows under different page names depending on app state), not
+// parent-context derivation.
 func (app *App) getPageHandle() string {
 	name := ""
 	if r := resolveResource(app.kind); r != nil {
 		name = r.PageHandle()
-	}
-	if name == "" {
-		switch app.kind {
-		case ServiceKind:
-			name = *app.cluster.ClusterArn
-		case TaskKind, TaskDefinitionKind, ServiceDeploymentKind:
-			name = *app.service.ServiceArn
-		case ContainerKind:
-			name = *app.task.TaskArn
-		case SQSPeekKind:
-			name = app.Entity.sqsQueueName
-		case DynamoDBIndexKind:
-			if app.Entity.ddbTable != nil {
-				name = aws.ToString(app.Entity.ddbTable.TableName)
-			}
-		case DynamoDBScanKind:
-			if app.Entity.ddbTable != nil && app.Entity.ddbIndex != nil {
-				name = aws.ToString(app.Entity.ddbTable.TableName) + "." + app.Entity.ddbIndex.name
-			}
-		}
 	}
 	// based on different task status different name
 	if app.kind == TaskKind {
@@ -354,21 +320,16 @@ func (app *App) start() error {
 	if app.Option.Cluster == "" {
 		err = app.showPrimaryKindPage(ProfileKind, false)
 	} else {
-		app.cluster.ClusterName = &app.Option.Cluster
+		if ck := getClusterKind(); ck != nil {
+			ck.SetSelection(&types.Cluster{ClusterName: aws.String(app.Option.Cluster)})
+		}
 		if app.Option.Service == "" {
 			err = app.showPrimaryKindPage(ServiceKind, false)
 		} else {
-			app.service.ServiceName = &app.Option.Service
+			if sk := getServiceKind(); sk != nil {
+				sk.SetSelection(&types.Service{ServiceName: aws.String(app.Option.Service)})
+			}
 			err = app.showPrimaryKindPage(TaskKind, false)
-		}
-		// Keep the registry in sync with the --cluster/--service flag mutations
-		// above so typed accessors see the same names. This dual-write goes away
-		// in Phase 4.7 PR-final when the legacy fields are dropped.
-		if ck := getClusterKind(); ck != nil {
-			ck.SetSelection(app.cluster)
-		}
-		if sk := getServiceKind(); sk != nil {
-			sk.SetSelection(app.service)
 		}
 	}
 
@@ -558,6 +519,14 @@ func (app *App) globalInputHandle(event *tcell.EventKey) *tcell.EventKey {
 }
 
 func (app *App) LogValue() slog.Value {
+	cluster := ""
+	if c := app.Cluster(); c != nil && c.ClusterName != nil {
+		cluster = *c.ClusterName
+	}
+	service := ""
+	if s := app.Service(); s != nil && s.ServiceName != nil {
+		service = *s.ServiceName
+	}
 	return slog.AnyValue(struct {
 		kind          string
 		secondaryKind string
@@ -566,8 +535,8 @@ func (app *App) LogValue() slog.Value {
 	}{
 		kind:          app.kind.String(),
 		secondaryKind: app.secondaryKind.String(),
-		cluster:       *app.cluster.ClusterName,
-		service:       *app.service.ServiceName,
+		cluster:       cluster,
+		service:       service,
 	})
 }
 

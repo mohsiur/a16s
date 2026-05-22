@@ -13,7 +13,7 @@ import (
 // a routing target for kindpkg.Resource.BrowserURL so `o` on an ECS row goes
 // through the same dispatcher as Lambda. Each one captures whatever selection
 // state ArnToUrl needs (and, for task/container, the parent service name),
-// updated alongside app.cluster/app.service/... in changeSelectedValues.
+// updated via SetSelection in changeSelectedValues.
 func init() {
 	kindpkg.Register(&clusterKind{})
 	kindpkg.Register(&serviceKind{})
@@ -135,9 +135,9 @@ func (k *taskKind) BrowserURL(_ string) (string, error) {
 		svcName = *sk.selected.ServiceName
 	}
 	if svcName == "" {
-		// Fall through to legacy switch which reads app.service directly. This
-		// keeps behaviour identical when the migration is invoked in a state
-		// where the parent service hasn't been mirrored into the registry.
+		// Parent service hasn't been mirrored yet (e.g. an entry path that
+		// bypassed changeSelectedValues). Caller falls back to reading the
+		// parent service directly via openInBrowser.
 		return "", nil
 	}
 	return utils.ArnToUrl(*k.selected.TaskArn, svcName), nil

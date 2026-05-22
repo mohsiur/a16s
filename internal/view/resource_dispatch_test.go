@@ -349,10 +349,9 @@ func TestIsFlatLeaf_DrivenByTraits(t *testing.T) {
 }
 
 // TestPageHandle_DrivenByResource pins that getPageHandle reads through
-// Resource.PageHandle (the parent context segment) before falling back to
-// the legacy app-state switch. The parent kinds are mirrored into the
-// registry, so every leaf with a parent should produce its scoped page key
-// without consulting app.cluster / app.service / app.task / app.sqsQueueName.
+// Resource.PageHandle (the parent context segment). The parent kinds are
+// mirrored into the registry, so every leaf with a parent should produce
+// its scoped page key purely from registry-backed selection.
 func TestPageHandle_DrivenByResource(t *testing.T) {
 	ck := getClusterKind()
 	sk := getServiceKind()
