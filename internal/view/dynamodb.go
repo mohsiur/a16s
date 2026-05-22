@@ -404,6 +404,18 @@ func (k *ddbIndexKind) FooterItem() kindpkg.FooterItem {
 	return kindpkg.FooterItem{Label: "indexes"}
 }
 
+// Traits flag the affordances the indexes page opts into. Drillable is the
+// load-bearing one: Enter on an index drills to DynamoDBScanKind. Without it
+// the trait gate in handleSelected blocks the drill and items never appear.
+func (k *ddbIndexKind) Traits() kindpkg.Traits {
+	return kindpkg.Traits{
+		Filterable:  true,
+		Refreshable: true,
+		Drillable:   true,
+		Browsable:   true,
+	}
+}
+
 // PageHandle returns the parent table's name so index pages stay scoped to
 // the active table.
 func (k *ddbIndexKind) PageHandle() string {
