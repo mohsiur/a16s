@@ -33,9 +33,8 @@ const (
 //	  --limit 100 \
 //	  --query "events[*].[timestamp,message]" \
 //	  --output table
-func (store *Store) GetServiceLogs(tdArn *string) ([]string, error) {
-	store.initCloudwatchlogsClient()
-	td, err := store.DescribeTaskDefinition(tdArn)
+func (c *Clients) GetServiceLogs(tdArn *string) ([]string, error) {
+	td, err := c.DescribeTaskDefinition(tdArn)
 
 	if err != nil {
 		slog.Warn("failed to run aws api to describe task definition", "error", err)
@@ -44,14 +43,14 @@ func (store *Store) GetServiceLogs(tdArn *string) ([]string, error) {
 
 	logs := []string{}
 	logGroupNames := make(map[string]bool)
-	for _, c := range td.ContainerDefinitions {
-		if c.LogConfiguration == nil {
+	for _, cd := range td.ContainerDefinitions {
+		if cd.LogConfiguration == nil {
 			continue
 		}
-		if c.LogConfiguration.LogDriver != types.LogDriverAwslogs {
+		if cd.LogConfiguration.LogDriver != types.LogDriverAwslogs {
 			continue
 		}
-		groupName := c.LogConfiguration.Options["awslogs-group"]
+		groupName := cd.LogConfiguration.Options["awslogs-group"]
 		if groupName == "" {
 			continue
 		}
@@ -68,7 +67,7 @@ func (store *Store) GetServiceLogs(tdArn *string) ([]string, error) {
 			OrderBy:      cloudwatchlogsTypes.OrderByLastEventTime,
 			Descending:   aws.Bool(true),
 		}
-		describeLogStreamsOutput, err := store.cloudwatchlogs.DescribeLogStreams(context.Background(), describeLogStreamsInput)
+		describeLogStreamsOutput, err := c.CloudWatchLogs().DescribeLogStreams(context.Background(), describeLogStreamsInput)
 		if err != nil {
 			slog.Warn("failed to run aws api to describe log stream", "error", err)
 			continue
@@ -80,7 +79,7 @@ func (store *Store) GetServiceLogs(tdArn *string) ([]string, error) {
 			LogStreamName: streamName,
 			Limit:         aws.Int32(100),
 		}
-		getLogEventsOutput, err := store.cloudwatchlogs.GetLogEvents(context.Background(), getLogEventsInput)
+		getLogEventsOutput, err := c.CloudWatchLogs().GetLogEvents(context.Background(), getLogEventsInput)
 		if err != nil {
 			slog.Warn("failed to run aws api to get log events", "error", err)
 			continue
@@ -105,9 +104,8 @@ func (store *Store) GetServiceLogs(tdArn *string) ([]string, error) {
 //	  --limit 50 \
 //	  --query "events[*].[timestamp,message]" \
 //	  --output table
-func (store *Store) GetLogStreamLogs(tdArn *string, taskId string, containerName string) ([]string, error) {
-	store.initCloudwatchlogsClient()
-	td, err := store.DescribeTaskDefinition(tdArn)
+func (c *Clients) GetLogStreamLogs(tdArn *string, taskId string, containerName string) ([]string, error) {
+	td, err := c.DescribeTaskDefinition(tdArn)
 
 	if err != nil {
 		slog.Warn("failed to run aws api to describe task definition", "error", err)
@@ -115,35 +113,35 @@ func (store *Store) GetLogStreamLogs(tdArn *string, taskId string, containerName
 	}
 
 	logs := []string{}
-	for _, c := range td.ContainerDefinitions {
-		if *c.Name != containerName && containerName != "" {
+	for _, cd := range td.ContainerDefinitions {
+		if *cd.Name != containerName && containerName != "" {
 			continue
 		}
-		if c.LogConfiguration == nil {
+		if cd.LogConfiguration == nil {
 			continue
 		}
-		if c.LogConfiguration.LogDriver != types.LogDriverAwslogs {
+		if cd.LogConfiguration.LogDriver != types.LogDriverAwslogs {
 			continue
 		}
-		groupName := c.LogConfiguration.Options["awslogs-group"]
+		groupName := cd.LogConfiguration.Options["awslogs-group"]
 		if groupName == "" {
 			continue
 		}
 
-		streamPrefix := *c.Name
+		streamPrefix := *cd.Name
 
-		if _, ok := c.LogConfiguration.Options["awslogs-stream-prefix"]; ok {
-			streamPrefix = c.LogConfiguration.Options["awslogs-stream-prefix"]
+		if _, ok := cd.LogConfiguration.Options["awslogs-stream-prefix"]; ok {
+			streamPrefix = cd.LogConfiguration.Options["awslogs-stream-prefix"]
 		}
 
-		streamName := fmt.Sprintf("%s/%s/%s", streamPrefix, *c.Name, taskId)
+		streamName := fmt.Sprintf("%s/%s/%s", streamPrefix, *cd.Name, taskId)
 
 		getLogEventsInput := &cloudwatchlogs.GetLogEventsInput{
 			LogGroupName:  &groupName,
 			LogStreamName: &streamName,
 			Limit:         aws.Int32(50),
 		}
-		getLogEventsOutput, err := store.cloudwatchlogs.GetLogEvents(context.Background(), getLogEventsInput)
+		getLogEventsOutput, err := c.CloudWatchLogs().GetLogEvents(context.Background(), getLogEventsInput)
 		if err != nil {
 			slog.Warn("failed to run aws api to get log events", "error", err)
 			continue
@@ -162,9 +160,8 @@ func (store *Store) GetLogStreamLogs(tdArn *string, taskId string, containerName
 
 // GetLogGroupTail returns the most recent `limit` events from the latest
 // log stream of the given log group, formatted with timestamp prefixes.
-func (store *Store) GetLogGroupTail(ctx context.Context, logGroup string, limit int32) ([]string, error) {
-	store.initCloudwatchlogsClient()
-	streams, err := store.cloudwatchlogs.DescribeLogStreams(ctx, &cloudwatchlogs.DescribeLogStreamsInput{
+func (c *Clients) GetLogGroupTail(ctx context.Context, logGroup string, limit int32) ([]string, error) {
+	streams, err := c.CloudWatchLogs().DescribeLogStreams(ctx, &cloudwatchlogs.DescribeLogStreamsInput{
 		LogGroupName: &logGroup,
 		Limit:        aws.Int32(1),
 		OrderBy:      cloudwatchlogsTypes.OrderByLastEventTime,
@@ -176,7 +173,7 @@ func (store *Store) GetLogGroupTail(ctx context.Context, logGroup string, limit 
 	if len(streams.LogStreams) == 0 {
 		return []string{"(no log streams yet)"}, nil
 	}
-	events, err := store.cloudwatchlogs.GetLogEvents(ctx, &cloudwatchlogs.GetLogEventsInput{
+	events, err := c.CloudWatchLogs().GetLogEvents(ctx, &cloudwatchlogs.GetLogEventsInput{
 		LogGroupName:  &logGroup,
 		LogStreamName: streams.LogStreams[0].LogStreamName,
 		Limit:         aws.Int32(limit),

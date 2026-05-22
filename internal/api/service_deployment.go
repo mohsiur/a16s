@@ -11,7 +11,7 @@ import (
 // Equivalent to
 // aws ecs list-service-deployments --cluster ${cluster} --service ${service}
 // aws ecs describe-service-deployments --service-deployment-arns ${arn1} ${arn2}
-func (store *Store) ListServiceDeployments(cluster, service *string) ([]types.ServiceDeployment, error) {
+func (c *Clients) ListServiceDeployments(cluster, service *string) ([]types.ServiceDeployment, error) {
 	batchSize := 20
 	limit := int32(batchSize)
 	deploymentARNs := []string{}
@@ -21,7 +21,7 @@ func (store *Store) ListServiceDeployments(cluster, service *string) ([]types.Se
 		MaxResults: &limit,
 	}
 
-	listServiceDeploymentsOutput, err := store.ecs.ListServiceDeployments(context.Background(), params)
+	listServiceDeploymentsOutput, err := c.ECS().ListServiceDeployments(context.Background(), params)
 	if err != nil {
 		slog.Warn("failed to run aws api to list service deployments", "error", err)
 		return []types.ServiceDeployment{}, err
@@ -31,7 +31,7 @@ func (store *Store) ListServiceDeployments(cluster, service *string) ([]types.Se
 		deploymentARNs = append(deploymentARNs, *deployment.ServiceDeploymentArn)
 	}
 
-	describeOutput, err := store.ecs.DescribeServiceDeployments(context.Background(), &ecs.DescribeServiceDeploymentsInput{
+	describeOutput, err := c.ECS().DescribeServiceDeployments(context.Background(), &ecs.DescribeServiceDeploymentsInput{
 		ServiceDeploymentArns: deploymentARNs,
 	})
 
@@ -45,8 +45,8 @@ func (store *Store) ListServiceDeployments(cluster, service *string) ([]types.Se
 
 // Equivalent to
 // aws ecs describe-service-revisions --service-revision-arns ${arn1}
-func (store *Store) GetServiceRevision(serviceRevisionArn *string) (*types.ServiceRevision, error) {
-	describeServiceRevisionOutput, err := store.ecs.DescribeServiceRevisions(context.Background(), &ecs.DescribeServiceRevisionsInput{
+func (c *Clients) GetServiceRevision(serviceRevisionArn *string) (*types.ServiceRevision, error) {
+	describeServiceRevisionOutput, err := c.ECS().DescribeServiceRevisions(context.Background(), &ecs.DescribeServiceRevisionsInput{
 		ServiceRevisionArns: []string{*serviceRevisionArn},
 	})
 	if err != nil {

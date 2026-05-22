@@ -14,42 +14,25 @@ import (
 	regionsLib "github.com/keidarcy/aws-regions/v3"
 )
 
-// SwitchAwsConfig switches to a different AWS profile and reinitializes clients
+// SwitchAwsConfig switches to a different AWS profile and reinitializes clients.
+// Tests that build Store via struct literal don't run NewStore, so initialise
+// Clients lazily here.
 func (store *Store) SwitchAwsConfig(profile string, region string) error {
 	os.Setenv("AWS_PROFILE", profile)
 	os.Setenv("AWS_REGION", region)
 
-	// Load new configuration with the updated profile
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
 		slog.Error("failed to load aws SDK config with new profile", "profile", profile, "error", err)
 		return err
 	}
 
-	// Update store with new configuration
 	store.Config = &cfg
-
-	// Delegate the actual client swap to Clients (single source of truth);
-	// then mirror its post-switch state into the legacy Store fields so
-	// direct readers (cluster.go store.ecs, metrics.go store.cloudwatch, ...)
-	// pick up the new config on next access. PR-B will move readers onto
-	// Clients accessors and PR-C deletes these field shadows. Tests that
-	// build Store via struct literal don't run NewStore, so initialise
-	// clients lazily here.
-	if store.clients == nil {
-		store.clients = NewClients(cfg)
+	if store.Clients == nil {
+		store.Clients = NewClients(cfg)
 	} else {
-		store.clients.SwitchConfig(cfg)
+		store.Clients.SwitchConfig(cfg)
 	}
-	store.ecs = store.clients.ECS()
-	store.cloudwatch = nil
-	store.cloudwatchlogs = nil
-	store.ssm = nil
-	store.autoScaling = nil
-	store.account = nil
-	store.lambda = nil
-	store.sqs = nil
-	store.dynamodb = nil
 
 	slog.Info("switched AWS profile", slog.String("AWS_PROFILE", profile), slog.String("AWS_REGION", region))
 
@@ -67,7 +50,7 @@ type Profile struct {
 	AuthStyle     string
 }
 
-func (store *Store) ListProfiles() ([]Profile, error) {
+func (c *Clients) ListProfiles() ([]Profile, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
@@ -267,10 +250,9 @@ type Region struct {
 	Enabled string
 }
 
-func (store *Store) ListRegions() ([]Region, error) {
-	store.initAccountClient()
+func (c *Clients) ListRegions() ([]Region, error) {
 	limit := int32(50)
-	regionsOutput, err := store.account.ListRegions(context.Background(), &account.ListRegionsInput{MaxResults: &limit})
+	regionsOutput, err := c.Account().ListRegions(context.Background(), &account.ListRegionsInput{MaxResults: &limit})
 	if err != nil {
 		slog.Warn("failed to run aws api list regions", "error", err)
 		return nil, err

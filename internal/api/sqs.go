@@ -9,10 +9,9 @@ import (
 	sqsTypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 )
 
-func (store *Store) ListQueues(ctx context.Context) ([]string, error) {
-	c := store.initSqsClient()
+func (c *Clients) ListQueues(ctx context.Context) ([]string, error) {
 	slog.Debug("api ListQueues")
-	out, err := c.ListQueues(ctx, &sqs.ListQueuesInput{})
+	out, err := c.SQS().ListQueues(ctx, &sqs.ListQueuesInput{})
 	if err != nil {
 		slog.Error("ListQueues failed", "error", err)
 		return nil, err
@@ -20,9 +19,8 @@ func (store *Store) ListQueues(ctx context.Context) ([]string, error) {
 	return out.QueueUrls, nil
 }
 
-func (store *Store) GetQueueAttributes(ctx context.Context, queueURL string) (map[string]string, error) {
-	c := store.initSqsClient()
-	out, err := c.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
+func (c *Clients) GetQueueAttributes(ctx context.Context, queueURL string) (map[string]string, error) {
+	out, err := c.SQS().GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
 		QueueUrl:       &queueURL,
 		AttributeNames: []sqsTypes.QueueAttributeName{sqsTypes.QueueAttributeNameAll},
 	})
@@ -36,9 +34,8 @@ func (store *Store) GetQueueAttributes(ctx context.Context, queueURL string) (ma
 // consumers are not affected. MessageSystemAttributeNameAll asks SQS to
 // include the SentTimestamp/SenderId/etc attributes — without it the peek
 // table can't render the "Sent" age column.
-func (store *Store) PeekMessages(ctx context.Context, queueURL string) ([]sqsTypes.Message, error) {
-	c := store.initSqsClient()
-	out, err := c.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
+func (c *Clients) PeekMessages(ctx context.Context, queueURL string) ([]sqsTypes.Message, error) {
+	out, err := c.SQS().ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
 		QueueUrl:                    &queueURL,
 		MaxNumberOfMessages:         10,
 		VisibilityTimeout:           0,
@@ -51,25 +48,23 @@ func (store *Store) PeekMessages(ctx context.Context, queueURL string) ([]sqsTyp
 	return out.Messages, nil
 }
 
-func (store *Store) SendMessage(ctx context.Context, queueURL, body string) error {
-	c := store.initSqsClient()
-	_, err := c.SendMessage(ctx, &sqs.SendMessageInput{
+func (c *Clients) SendMessage(ctx context.Context, queueURL, body string) error {
+	_, err := c.SQS().SendMessage(ctx, &sqs.SendMessageInput{
 		QueueUrl:    &queueURL,
 		MessageBody: aws.String(body),
 	})
 	return err
 }
 
-func (store *Store) PurgeQueue(ctx context.Context, queueURL string) error {
-	c := store.initSqsClient()
-	_, err := c.PurgeQueue(ctx, &sqs.PurgeQueueInput{QueueUrl: &queueURL})
+func (c *Clients) PurgeQueue(ctx context.Context, queueURL string) error {
+	_, err := c.SQS().PurgeQueue(ctx, &sqs.PurgeQueueInput{QueueUrl: &queueURL})
 	return err
 }
 
 // StoreWithSqsForTest constructs a Store with a pre-configured SQS client.
 // Used by tests in any package that need to mock SQS at the SDK middleware
-// layer; the Store.sqs field is unexported so this is the only safe entry
+// layer; the Clients fields are unexported so this is the only safe entry
 // point.
 func StoreWithSqsForTest(cfg *aws.Config, c *sqs.Client) *Store {
-	return &Store{Config: cfg, sqs: c}
+	return &Store{Config: cfg, Clients: ClientsWithSqsForTest(*cfg, c)}
 }

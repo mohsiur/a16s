@@ -19,7 +19,7 @@ func newStoreWithLambda(t *testing.T, fn func(ctx context.Context, in smithymidd
 			return stack.Finalize.Add(smithymiddleware.FinalizeMiddlewareFunc("mock", fn), smithymiddleware.Before)
 		})
 	})
-	return &Store{Config: &cfg, lambda: c}
+	return &Store{Config: &cfg, Clients: ClientsWithLambdaForTest(cfg, c)}
 }
 
 func TestListFunctionsHappyPath(t *testing.T) {

@@ -19,7 +19,7 @@ func newStoreWithDDB(t *testing.T, fn func(ctx context.Context, in smithymiddlew
 			return stack.Finalize.Add(smithymiddleware.FinalizeMiddlewareFunc("mock", fn), smithymiddleware.Before)
 		})
 	})
-	return &Store{Config: &cfg, dynamodb: c}
+	return &Store{Config: &cfg, Clients: ClientsWithDynamoDBForTest(cfg, c)}
 }
 
 func TestListTablesHappyPath(t *testing.T) {

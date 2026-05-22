@@ -12,14 +12,13 @@ import (
 // ListFunctions returns all Lambda functions in the current region. Paginates
 // internally; returns whatever it has on the first error after the first
 // page (matches ListClusters behaviour in cluster.go).
-func (store *Store) ListFunctions(ctx context.Context) ([]lambdaTypes.FunctionConfiguration, error) {
-	c := store.initLambdaClient()
+func (c *Clients) ListFunctions(ctx context.Context) ([]lambdaTypes.FunctionConfiguration, error) {
 	slog.Debug("api ListFunctions")
 
 	var out []lambdaTypes.FunctionConfiguration
 	var marker *string
 	for {
-		resp, err := c.ListFunctions(ctx, &lambda.ListFunctionsInput{Marker: marker})
+		resp, err := c.Lambda().ListFunctions(ctx, &lambda.ListFunctionsInput{Marker: marker})
 		if err != nil {
 			slog.Error("ListFunctions failed", "error", err)
 			if len(out) == 0 {
@@ -37,18 +36,16 @@ func (store *Store) ListFunctions(ctx context.Context) ([]lambdaTypes.FunctionCo
 
 // GetFunction returns the full configuration for a single function (env vars,
 // VPC config, layers, DLQ — anything not in the ListFunctions summary).
-func (store *Store) GetFunction(ctx context.Context, name string) (*lambda.GetFunctionOutput, error) {
-	c := store.initLambdaClient()
+func (c *Clients) GetFunction(ctx context.Context, name string) (*lambda.GetFunctionOutput, error) {
 	slog.Debug("api GetFunction", "name", name)
-	return c.GetFunction(ctx, &lambda.GetFunctionInput{FunctionName: &name})
+	return c.Lambda().GetFunction(ctx, &lambda.GetFunctionInput{FunctionName: &name})
 }
 
 // InvokeFunction invokes a function with the given payload (raw JSON bytes).
 // Always uses RequestResponse so the caller can show the result.
-func (store *Store) InvokeFunction(ctx context.Context, name string, payload []byte) (*lambda.InvokeOutput, error) {
-	c := store.initLambdaClient()
+func (c *Clients) InvokeFunction(ctx context.Context, name string, payload []byte) (*lambda.InvokeOutput, error) {
 	slog.Debug("api InvokeFunction", "name", name, "payloadBytes", len(payload))
-	return c.Invoke(ctx, &lambda.InvokeInput{
+	return c.Lambda().Invoke(ctx, &lambda.InvokeInput{
 		FunctionName: &name,
 		Payload:      payload,
 	})
@@ -58,5 +55,5 @@ func (store *Store) InvokeFunction(ctx context.Context, name string, payload []b
 // Mirrors StoreWithSqsForTest — the only entry point for view-package tests
 // that need to mock Lambda at the SDK middleware layer.
 func StoreWithLambdaForTest(cfg *aws.Config, c *lambda.Client) *Store {
-	return &Store{Config: cfg, lambda: c}
+	return &Store{Config: cfg, Clients: ClientsWithLambdaForTest(*cfg, c)}
 }

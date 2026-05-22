@@ -13,7 +13,7 @@ import (
 // Equivalent to
 // aws ecs list-clusters
 // aws ecs describe-clusters --clusters ${clusters}
-func (store *Store) ListClusters() ([]types.Cluster, error) {
+func (c *Clients) ListClusters() ([]types.Cluster, error) {
 	batchSize := 100
 	limit := int32(batchSize)
 	clusterARNs := []string{}
@@ -22,7 +22,7 @@ func (store *Store) ListClusters() ([]types.Cluster, error) {
 	}
 
 	for {
-		clustersOutput, err := store.ecs.ListClusters(context.Background(), params)
+		clustersOutput, err := c.ECS().ListClusters(context.Background(), params)
 		if err != nil {
 			slog.Warn("failed to run aws api to list clusters", "error", err)
 			if len(clusterARNs) == 0 {
@@ -62,7 +62,7 @@ func (store *Store) ListClusters() ([]types.Cluster, error) {
 			clusters := clusterARNs[i*batchSize : int(math.Min(float64((i+1)*batchSize), float64(clusterCount)))]
 
 			// If describe more than 100, InvalidParameterException: Clusters cannot have more than 100 elements
-			describeClusterOutput, err := store.ecs.DescribeClusters(context.Background(), &ecs.DescribeClustersInput{
+			describeClusterOutput, err := c.ECS().DescribeClusters(context.Background(), &ecs.DescribeClustersInput{
 				Clusters: clusters,
 				Include:  include,
 			})

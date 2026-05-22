@@ -22,13 +22,13 @@ type MetricsData struct {
 }
 
 // Get ECS service metrics(CPU, Memory)
-func (store *Store) GetMetrics(cluster, service *string) (*MetricsData, error) {
-	cpu, err := store.getCPU(cluster, service)
+func (c *Clients) GetMetrics(cluster, service *string) (*MetricsData, error) {
+	cpu, err := c.getCPU(cluster, service)
 	if err != nil {
 		return nil, err
 	}
 
-	memory, err := store.getMemory(cluster, service)
+	memory, err := c.getMemory(cluster, service)
 	if err != nil {
 		return nil, err
 	}
@@ -52,10 +52,10 @@ func (store *Store) GetMetrics(cluster, service *string) (*MetricsData, error) {
 //					--dimensions Name=ClusterName,Value=${clusterName} Name=ServiceName,Value=${serviceName}
 //
 // Get last 30 minute, granularity 1800 seconds CPUUtilization
-func (store *Store) getCPU(cluster, service *string) ([]types.Datapoint, error) {
-	statisticsInput := store.getStatisticsInput(cluster, service)
+func (c *Clients) getCPU(cluster, service *string) ([]types.Datapoint, error) {
+	statisticsInput := c.getStatisticsInput(cluster, service)
 	statisticsInput.MetricName = aws.String(CPU)
-	metricOutput, err := store.cloudwatch.GetMetricStatistics(context.TODO(), statisticsInput)
+	metricOutput, err := c.CloudWatch().GetMetricStatistics(context.TODO(), statisticsInput)
 
 	if err != nil {
 		slog.Warn("failed to run aws api", "metrics", CPU, "cluster", *cluster, "service", *service, "error", err)
@@ -77,10 +77,10 @@ func (store *Store) getCPU(cluster, service *string) ([]types.Datapoint, error) 
 //					--dimensions Name=ClusterName,Value=${clusterName} Name=ServiceName,Value=${serviceName}
 //
 // Get last 30 minute, granularity 1800 seconds CPUUtilization
-func (store *Store) getMemory(cluster, service *string) ([]types.Datapoint, error) {
-	statisticsInput := store.getStatisticsInput(cluster, service)
+func (c *Clients) getMemory(cluster, service *string) ([]types.Datapoint, error) {
+	statisticsInput := c.getStatisticsInput(cluster, service)
 	statisticsInput.MetricName = aws.String(Memory)
-	metricOutput, err := store.cloudwatch.GetMetricStatistics(context.TODO(), statisticsInput)
+	metricOutput, err := c.CloudWatch().GetMetricStatistics(context.TODO(), statisticsInput)
 
 	if err != nil {
 		slog.Warn("failed to run aws api", "metrics", Memory, "cluster", *cluster, "service", *service, "error", err)
@@ -90,8 +90,7 @@ func (store *Store) getMemory(cluster, service *string) ([]types.Datapoint, erro
 	return metricOutput.Datapoints, nil
 }
 
-func (store *Store) getStatisticsInput(cluster, service *string) *cloudwatch.GetMetricStatisticsInput {
-	store.initCloudwatchClient()
+func (c *Clients) getStatisticsInput(cluster, service *string) *cloudwatch.GetMetricStatisticsInput {
 
 	// period := 30
 	// granularity := 1800

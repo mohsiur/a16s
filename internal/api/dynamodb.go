@@ -11,14 +11,13 @@ import (
 
 // ListTables returns every DynamoDB table name in the current region. Paginates
 // internally; on first error after the first page, returns what it has.
-func (store *Store) ListTables(ctx context.Context) ([]string, error) {
-	c := store.initDynamoDBClient()
+func (c *Clients) ListTables(ctx context.Context) ([]string, error) {
 	slog.Debug("api ListTables")
 
 	var out []string
 	var lastEvaluated *string
 	for {
-		resp, err := c.ListTables(ctx, &dynamodb.ListTablesInput{
+		resp, err := c.DynamoDB().ListTables(ctx, &dynamodb.ListTablesInput{
 			ExclusiveStartTableName: lastEvaluated,
 		})
 		if err != nil {
@@ -37,10 +36,9 @@ func (store *Store) ListTables(ctx context.Context) ([]string, error) {
 }
 
 // DescribeTable returns the full table metadata (key schema, GSIs, streams).
-func (store *Store) DescribeTable(ctx context.Context, name string) (*ddbTypes.TableDescription, error) {
-	c := store.initDynamoDBClient()
+func (c *Clients) DescribeTable(ctx context.Context, name string) (*ddbTypes.TableDescription, error) {
 	slog.Debug("api DescribeTable", "name", name)
-	resp, err := c.DescribeTable(ctx, &dynamodb.DescribeTableInput{TableName: &name})
+	resp, err := c.DynamoDB().DescribeTable(ctx, &dynamodb.DescribeTableInput{TableName: &name})
 	if err != nil {
 		return nil, err
 	}
@@ -49,14 +47,13 @@ func (store *Store) DescribeTable(ctx context.Context, name string) (*ddbTypes.T
 
 // ScanFirstPage runs a Scan with the given limit and returns the first page
 // only. Pagination beyond page 1 is a follow-up.
-func (store *Store) ScanFirstPage(ctx context.Context, table string, limit int32) ([]map[string]ddbTypes.AttributeValue, error) {
-	return store.ScanIndexFirstPage(ctx, table, "", limit)
+func (c *Clients) ScanFirstPage(ctx context.Context, table string, limit int32) ([]map[string]ddbTypes.AttributeValue, error) {
+	return c.ScanIndexFirstPage(ctx, table, "", limit)
 }
 
 // ScanIndexFirstPage scans either the base table (indexName == "") or a GSI/LSI
 // (indexName non-empty) and returns the first page of items.
-func (store *Store) ScanIndexFirstPage(ctx context.Context, table, indexName string, limit int32) ([]map[string]ddbTypes.AttributeValue, error) {
-	c := store.initDynamoDBClient()
+func (c *Clients) ScanIndexFirstPage(ctx context.Context, table, indexName string, limit int32) ([]map[string]ddbTypes.AttributeValue, error) {
 	slog.Debug("api ScanIndexFirstPage", "table", table, "index", indexName, "limit", limit)
 	in := &dynamodb.ScanInput{
 		TableName: &table,
@@ -65,7 +62,7 @@ func (store *Store) ScanIndexFirstPage(ctx context.Context, table, indexName str
 	if indexName != "" {
 		in.IndexName = &indexName
 	}
-	resp, err := c.Scan(ctx, in)
+	resp, err := c.DynamoDB().Scan(ctx, in)
 	if err != nil {
 		return nil, err
 	}
@@ -75,8 +72,7 @@ func (store *Store) ScanIndexFirstPage(ctx context.Context, table, indexName str
 // QueryEquality runs a Query against the base table or an index using a single
 // equality condition on `keyAttr`. The value is treated as a string. Returns
 // the first page only.
-func (store *Store) QueryEquality(ctx context.Context, table, indexName, keyAttr, keyValue string, limit int32) ([]map[string]ddbTypes.AttributeValue, error) {
-	c := store.initDynamoDBClient()
+func (c *Clients) QueryEquality(ctx context.Context, table, indexName, keyAttr, keyValue string, limit int32) ([]map[string]ddbTypes.AttributeValue, error) {
 	slog.Debug("api QueryEquality", "table", table, "index", indexName, "attr", keyAttr, "limit", limit)
 	in := &dynamodb.QueryInput{
 		TableName:              &table,
@@ -92,7 +88,7 @@ func (store *Store) QueryEquality(ctx context.Context, table, indexName, keyAttr
 	if indexName != "" {
 		in.IndexName = &indexName
 	}
-	resp, err := c.Query(ctx, in)
+	resp, err := c.DynamoDB().Query(ctx, in)
 	if err != nil {
 		return nil, err
 	}

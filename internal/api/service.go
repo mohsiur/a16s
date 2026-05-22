@@ -13,7 +13,7 @@ import (
 // Equivalent to
 // aws ecs list-services --cluster ${cluster}
 // aws ecs describe-services --cluster ${cluster} --services ${service}
-func (store *Store) ListServices(clusterName *string) ([]types.Service, error) {
+func (c *Clients) ListServices(clusterName *string) ([]types.Service, error) {
 	// You may specify up to 100 services to describe.
 	// If there are > 100 services in the cluster, loop and slice by 100
 	// to describe them in batches of <= 100.
@@ -26,7 +26,7 @@ func (store *Store) ListServices(clusterName *string) ([]types.Service, error) {
 	serviceARNs := []string{}
 
 	for {
-		listServicesOutput, err := store.ecs.ListServices(context.Background(), params)
+		listServicesOutput, err := c.ECS().ListServices(context.Background(), params)
 		if err != nil {
 			slog.Warn("failed to run aws api to list services", "error", err)
 			// If first run failed return err
@@ -72,7 +72,7 @@ func (store *Store) ListServices(clusterName *string) ([]types.Service, error) {
 		g.Go(func() error {
 			services := serviceARNs[i*batchSize : int(math.Min(float64((i+1)*batchSize), float64(serviceCount)))]
 
-			describeServicesOutput, err := store.ecs.DescribeServices(context.Background(), &ecs.DescribeServicesInput{
+			describeServicesOutput, err := c.ECS().DescribeServices(context.Background(), &ecs.DescribeServicesInput{
 				Services: services,
 				Cluster:  clusterName,
 				Include: []types.ServiceField{
@@ -99,7 +99,7 @@ func (store *Store) ListServices(clusterName *string) ([]types.Service, error) {
 
 // Equivalent to
 // aws ecs update-service --cluster ${cluster} --service ${service} --task-definition ${task-definition} --desired-count ${count} --force-new-deployment
-func (store *Store) UpdateService(input *ecs.UpdateServiceInput) (*types.Service, error) {
+func (c *Clients) UpdateService(input *ecs.UpdateServiceInput) (*types.Service, error) {
 	taskDefinition := "no task definition"
 	if input.TaskDefinition != nil {
 		taskDefinition = *input.TaskDefinition
@@ -126,7 +126,7 @@ func (store *Store) UpdateService(input *ecs.UpdateServiceInput) (*types.Service
 		),
 	)
 
-	updateOutput, err := store.ecs.UpdateService(context.Background(), input)
+	updateOutput, err := c.ECS().UpdateService(context.Background(), input)
 	if err != nil {
 		slog.Warn("failed to run aws api to update service", "error", err)
 		return nil, err
@@ -136,14 +136,14 @@ func (store *Store) UpdateService(input *ecs.UpdateServiceInput) (*types.Service
 
 // Equivalent to
 // aws ecs stop-service-deployment --service-deployment-arn ${service-deployment-arn} --stop-type ROLLBACK
-func (store *Store) RollbackServiceDeployment(serviceDeploymentArn *string) error {
+func (c *Clients) RollbackServiceDeployment(serviceDeploymentArn *string) error {
 	slog.Info("rollback service deployment",
 		slog.Group("parameters",
 			slog.String("serviceDeploymentArn", *serviceDeploymentArn),
 		),
 	)
 
-	_, err := store.ecs.StopServiceDeployment(context.Background(), &ecs.StopServiceDeploymentInput{
+	_, err := c.ECS().StopServiceDeployment(context.Background(), &ecs.StopServiceDeploymentInput{
 		ServiceDeploymentArn: serviceDeploymentArn,
 		StopType:             types.StopServiceDeploymentStopTypeRollback,
 	})

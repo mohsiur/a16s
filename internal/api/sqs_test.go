@@ -18,7 +18,7 @@ func newStoreWithSQS(t *testing.T, fn func(ctx context.Context, in smithymiddlew
 			return stack.Finalize.Add(smithymiddleware.FinalizeMiddlewareFunc("mock", fn), smithymiddleware.Before)
 		})
 	})
-	return &Store{Config: &cfg, sqs: c}
+	return &Store{Config: &cfg, Clients: ClientsWithSqsForTest(cfg, c)}
 }
 
 func TestListQueuesHappyPath(t *testing.T) {
