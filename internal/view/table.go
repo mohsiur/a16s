@@ -621,7 +621,7 @@ func (v *view) openInBrowser() {
 	// taskKind and containerKind are the one exception: their BrowserURL
 	// returns "" when the parent service hasn't been mirrored into the
 	// registry (e.g. an entry path that bypassed changeSelectedValues). The
-	// fallback below covers that case by reading app.service directly.
+	// fallback below covers that case by reading the parent service directly.
 	if r := resolveResource(v.app.kind); r != nil {
 		if u, _ := r.BrowserURL(region); u != "" {
 			slog.Info("open", "url", u, "via", "kind.Resource")
@@ -635,11 +635,11 @@ func (v *view) openInBrowser() {
 	taskService := ""
 	switch v.app.kind {
 	case TaskKind:
-		taskService = *v.app.service.ServiceName
+		taskService = *v.app.Service().ServiceName
 		arn = *selected.task.TaskArn
 	case ContainerKind:
-		taskService = *v.app.service.ServiceName
-		arn = *v.app.task.TaskArn
+		taskService = *v.app.Service().ServiceName
+		arn = *v.app.Task().TaskArn
 	default:
 		v.app.Notice.Warnf("open in browser not supported for %s", v.app.kind)
 		return

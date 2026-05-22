@@ -37,7 +37,7 @@ func (v *view) execShell() {
 		cmd := exec.Command(bin, cmdArgs...)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		// ignore the stderr from container
-		_, err = cmd.Stdout.Write([]byte(fmt.Sprintf(execBannerFmt, *v.app.cluster.ClusterName, *v.app.service.ServiceName, utils.ArnToName(v.app.task.TaskArn), containerName)))
+		_, err = cmd.Stdout.Write([]byte(fmt.Sprintf(execBannerFmt, *v.app.Cluster().ClusterName, *v.app.Service().ServiceName, utils.ArnToName(v.app.Task().TaskArn), containerName)))
 		err = cmd.Run()
 
 		// return signal
@@ -84,7 +84,7 @@ func (v *view) execCommandForm() (*tview.Form, *string) {
 
 			cmd := exec.Command(bin, cmdArgs...)
 			cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-			_, err = cmd.Stdout.Write([]byte(fmt.Sprintf(execBannerFmt, *v.app.cluster.ClusterName, *v.app.service.ServiceName, utils.ArnToName(v.app.task.TaskArn), containerName)))
+			_, err = cmd.Stdout.Write([]byte(fmt.Sprintf(execBannerFmt, *v.app.Cluster().ClusterName, *v.app.Service().ServiceName, utils.ArnToName(v.app.Task().TaskArn), containerName)))
 			time.Sleep(1 * time.Second)
 
 			cmd.Stdout.Write([]byte(fmt.Sprintf("\nExecute: \"%s\"\n", execCmd)))
@@ -138,9 +138,9 @@ func (v *view) preValidateExec() (*[]string, string, error) {
 		"ecs",
 		"execute-command",
 		"--cluster",
-		*v.app.cluster.ClusterName,
+		*v.app.Cluster().ClusterName,
 		"--task",
-		*v.app.task.TaskArn,
+		*v.app.Task().TaskArn,
 		"--container",
 		containerName,
 		"--interactive",
@@ -183,11 +183,12 @@ func (v *view) instanceStartSession() {
 		}
 		instanceId = *selected.instance.Ec2InstanceId
 	} else if v.app.kind == TaskKind {
-		if v.app.task.ContainerInstanceArn == nil {
+		t := v.app.Task()
+		if t == nil || t.ContainerInstanceArn == nil {
 			v.app.Notice.Warn("Not a valid task with container instance")
 			return
 		}
-		instanceId, err = v.app.Clients.GetTaskInstanceId(v.app.cluster.ClusterName, v.app.task.ContainerInstanceArn)
+		instanceId, err = v.app.Clients.GetTaskInstanceId(v.app.Cluster().ClusterName, t.ContainerInstanceArn)
 		if err != nil {
 			v.app.Notice.Warnf("failed to get task instance id, err: %v", err)
 			return
@@ -223,7 +224,7 @@ func (v *view) instanceStartSession() {
 
 		cmd := exec.Command(bin, args...)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-		_, err = cmd.Stdout.Write([]byte(fmt.Sprintf(instanceBannerFmt, *v.app.cluster.ClusterName, instanceId)))
+		_, err = cmd.Stdout.Write([]byte(fmt.Sprintf(instanceBannerFmt, *v.app.Cluster().ClusterName, instanceId)))
 		err = cmd.Run()
 
 		// return signal

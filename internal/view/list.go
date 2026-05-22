@@ -51,9 +51,10 @@ func (v *view) getListString(entity Entity) string {
 			taskId := utils.ArnToName(entity.task.TaskArn)
 			logs, err = v.app.Clients.GetLogStreamLogs(entity.task.TaskDefinitionArn, taskId, "")
 		case ContainerKind:
-			taskId := utils.ArnToName(v.app.task.TaskArn)
+			task := v.app.Task()
+			taskId := utils.ArnToName(task.TaskArn)
 			containerName := entity.container.Name
-			logs, err = v.app.Clients.GetLogStreamLogs(v.app.task.TaskDefinitionArn, taskId, *containerName)
+			logs, err = v.app.Clients.GetLogStreamLogs(task.TaskDefinitionArn, taskId, *containerName)
 		}
 
 		if err != nil {
@@ -106,7 +107,9 @@ func (v *view) realtimeAwsLog(entity Entity) {
 	} else if entity.task != nil {
 		tdArn = entity.task.TaskDefinitionArn
 	} else if entity.container != nil {
-		tdArn = v.app.service.TaskDefinition
+		if svc := v.app.Service(); svc != nil {
+			tdArn = svc.TaskDefinition
+		}
 	}
 	if tdArn == nil {
 		return
@@ -151,7 +154,7 @@ func (v *view) realtimeAwsLog(entity Entity) {
 			if _, ok := c.LogConfiguration.Options["awslogs-stream-prefix"]; ok {
 				streamPrefix = c.LogConfiguration.Options["awslogs-stream-prefix"]
 			}
-			taskId := utils.ArnToName(v.app.task.TaskArn)
+			taskId := utils.ArnToName(v.app.Task().TaskArn)
 			streamName := fmt.Sprintf("%s/%s/%s", streamPrefix, *c.Name, taskId)
 			logStreamNames = append(logStreamNames, streamName)
 		} else {
@@ -189,7 +192,7 @@ func (v *view) realtimeAwsLog(entity Entity) {
 			cmd := exec.Command(bin, args...)
 			cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 
-			_, err = cmd.Stdout.Write([]byte(fmt.Sprintf(realtimeLogFmt, *v.app.cluster.ClusterName, *v.app.service.ServiceName, logGroup, utils.ShowArray(logStreamNames))))
+			_, err = cmd.Stdout.Write([]byte(fmt.Sprintf(realtimeLogFmt, *v.app.Cluster().ClusterName, *v.app.Service().ServiceName, logGroup, utils.ShowArray(logStreamNames))))
 			err = cmd.Run()
 
 			// return signal

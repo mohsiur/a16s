@@ -120,7 +120,7 @@ func (v *view) showSecondaryKindPage(reload bool) {
 // Go current page based on current kind
 func (v *view) closeModal() {
 	v.app.secondaryKind = EmptyKind
-	if v.app.cluster == nil {
+	if v.app.Cluster() == nil {
 		v.app.Stop()
 		return
 	}

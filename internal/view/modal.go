@@ -77,8 +77,8 @@ func (v *view) stopTaskForm() (*tview.Form, *string) {
 		readOnly = readOnlyLabel
 	}
 
-	taskId := utils.ArnToName(v.app.task.TaskArn)
-	clusterName := *v.app.cluster.ClusterName
+	taskId := utils.ArnToName(v.app.Task().TaskArn)
+	clusterName := *v.app.Cluster().ClusterName
 	title := fmt.Sprintf(" Stop task [%s::b]%s[-:-:-] in [%s::b]%s[-:-:-] cluster %s? ", theme.Magenta, taskId, theme.Cyan, clusterName, readOnly)
 	f := ui.StyledForm(title)
 
@@ -118,13 +118,15 @@ func (v *view) rollbackServiceDeploymentForm() (*tview.Form, *string) {
 	if v.app.ReadOnly {
 		readOnly = readOnlyLabel
 	}
-	if v.app.serviceDeployment == nil || v.app.service == nil || v.app.serviceDeployment.ServiceDeploymentArn == nil {
+	sd := v.app.ServiceDeployment()
+	svc := v.app.Service()
+	if sd == nil || svc == nil || sd.ServiceDeploymentArn == nil {
 		slog.Warn("Unexpected nil to rollback service deployment")
 		return nil, nil
 	}
 
-	serviceName := *v.app.service.ServiceName
-	startedAt := utils.ShowTime(v.app.serviceDeployment.StartedAt)
+	serviceName := *svc.ServiceName
+	startedAt := utils.ShowTime(sd.StartedAt)
 	title := fmt.Sprintf(" rollback service [%s::b]%s[-:-:-] started at [%s::b]%s[-:-:-] service %s? ", theme.Magenta, serviceName, theme.Cyan, startedAt, readOnly)
 	f := ui.StyledForm(title)
 
@@ -140,7 +142,7 @@ func (v *view) rollbackServiceDeploymentForm() (*tview.Form, *string) {
 
 	// handle form submit
 	f.AddButton("Rollback", func() {
-		err := v.app.Clients.RollbackServiceDeployment(v.app.serviceDeployment.ServiceDeploymentArn)
+		err := v.app.Clients.RollbackServiceDeployment(sd.ServiceDeploymentArn)
 
 		if err != nil {
 			v.app.Notice.Error(err.Error())
@@ -161,12 +163,14 @@ func (v *view) serviceUpdateWithSpecificTaskDefinitionForm() (*tview.Form, *stri
 		readOnly = readOnlyLabel
 	}
 
-	if v.app.service == nil || v.app.taskDefinition == nil {
+	svc := v.app.Service()
+	tdSel := v.app.TaskDefinition()
+	if svc == nil || tdSel == nil {
 		slog.Warn("Unexpected nil to update service with task definition")
 		return nil, nil
 	}
-	serviceName := *v.app.service.ServiceName
-	td := utils.ArnToName(v.app.taskDefinition.TaskDefinitionArn)
+	serviceName := *svc.ServiceName
+	td := utils.ArnToName(tdSel.TaskDefinitionArn)
 
 	title := fmt.Sprintf(" Update [%s::b]%s[-:-:-] with task definition [%s::b]%s[-:-:-]%s? ", theme.Magenta, serviceName, theme.Cyan, td, readOnly)
 	f := ui.StyledForm(title)
@@ -185,7 +189,7 @@ func (v *view) serviceUpdateWithSpecificTaskDefinitionForm() (*tview.Form, *stri
 	f.AddButton("Update", func() {
 		input := &ecs.UpdateServiceInput{
 			Service:        aws.String(serviceName),
-			Cluster:        v.app.cluster.ClusterName,
+			Cluster:        v.app.Cluster().ClusterName,
 			TaskDefinition: aws.String(td),
 		}
 		s, err := v.app.Clients.UpdateService(input)
@@ -398,7 +402,7 @@ func (v *view) serviceUpdateForm() (*tview.Form, *string) {
 
 			input = &ecs.UpdateServiceInput{
 				Service:              aws.String(name),
-				Cluster:              v.app.cluster.ClusterName,
+				Cluster:              v.app.Cluster().ClusterName,
 				TaskDefinition:       taskDefinitionPtr,
 				DesiredCount:         aws.Int32(int32(desiredInt)),
 				ForceNewDeployment:   force,
@@ -408,7 +412,7 @@ func (v *view) serviceUpdateForm() (*tview.Form, *string) {
 		} else {
 			input = &ecs.UpdateServiceInput{
 				Service:              aws.String(name),
-				Cluster:              v.app.cluster.ClusterName,
+				Cluster:              v.app.Cluster().ClusterName,
 				DesiredCount:         aws.Int32(int32(desiredInt)),
 				ForceNewDeployment:   force,
 				EnableExecuteCommand: &execCommand,
@@ -457,7 +461,7 @@ func (v *view) serviceMetricsForm() (*tview.Form, *string) {
 	if err != nil {
 		return nil, nil
 	}
-	cluster := v.app.cluster.ClusterName
+	cluster := v.app.Cluster().ClusterName
 	service := *selected.service.ServiceName
 
 	title := " Metrics [purple::b](" + service + ")" + readOnlyLabel
