@@ -36,6 +36,15 @@ func getContainerViews() []containerView {
 	app.task = &types.Task{
 		TaskArn: aws.String(taskArn1),
 	}
+	if k := getClusterKind(); k != nil {
+		k.SetSelection(app.cluster)
+	}
+	if k := getServiceKind(); k != nil {
+		k.SetSelection(app.service)
+	}
+	if k := getTaskKind(); k != nil {
+		k.SetSelection(app.task)
+	}
 	ContainerView1 := newContainerView([]types.Container{container1}, app)
 	ContainerView2 := newContainerView([]types.Container{container2}, app)
 

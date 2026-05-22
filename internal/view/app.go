@@ -155,7 +155,7 @@ func newApp(option Option) (*App, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &App{
+	a := &App{
 		Application:      app,
 		Pages:            pages,
 		Notice:           notice,
@@ -182,7 +182,18 @@ func newApp(option Option) (*App, error) {
 			container:      &types.Container{},
 			taskDefinition: &types.TaskDefinition{},
 		},
-	}, nil
+	}
+	// Mirror the placeholder selections into the registry so the typed
+	// accessors (Cluster(), Service(), ...) match the legacy fields on
+	// first paint. Both sources are kept in sync until Phase 4.7 PR-final
+	// drops the legacy fields entirely.
+	if ck := getClusterKind(); ck != nil {
+		ck.SetSelection(a.Entity.cluster)
+	}
+	if sk := getServiceKind(); sk != nil {
+		sk.SetSelection(a.Entity.service)
+	}
+	return a, nil
 }
 
 // Entry point of the app
@@ -349,6 +360,15 @@ func (app *App) start() error {
 		} else {
 			app.service.ServiceName = &app.Option.Service
 			err = app.showPrimaryKindPage(TaskKind, false)
+		}
+		// Keep the registry in sync with the --cluster/--service flag mutations
+		// above so typed accessors see the same names. This dual-write goes away
+		// in Phase 4.7 PR-final when the legacy fields are dropped.
+		if ck := getClusterKind(); ck != nil {
+			ck.SetSelection(app.cluster)
+		}
+		if sk := getServiceKind(); sk != nil {
+			sk.SetSelection(app.service)
 		}
 	}
 

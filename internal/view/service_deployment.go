@@ -36,7 +36,14 @@ func (app *App) showServiceDeploymentPage(reload bool) error {
 		return nil
 	}
 
-	resources, err := app.Clients.ListServiceDeployments(app.cluster.ClusterName, app.service.ServiceName)
+	var clusterName, serviceName *string
+	if c := app.Cluster(); c != nil {
+		clusterName = c.ClusterName
+	}
+	if s := app.Service(); s != nil {
+		serviceName = s.ServiceName
+	}
+	resources, err := app.Clients.ListServiceDeployments(clusterName, serviceName)
 	err = buildResourcePage(resources, app, err, func() resourceViewBuilder {
 		return newServiceDeploymentView(resources, app)
 	})
@@ -122,8 +129,8 @@ func (v *serviceDeploymentView) headerPageItems(index int) (items []headerItem) 
 // Generate table params
 func (v *serviceDeploymentView) tableParamsBuilder() (title string, headers []string, rowsBuilder func() [][]string) {
 	serviceName := ""
-	if v.app.service.ServiceName != nil {
-		serviceName = *v.app.service.ServiceName
+	if svc := v.app.Service(); svc != nil && svc.ServiceName != nil {
+		serviceName = *svc.ServiceName
 	}
 
 	title = fmt.Sprintf(color.TableTitleFmt, v.app.kind, serviceName, len(v.serviceDeployments))

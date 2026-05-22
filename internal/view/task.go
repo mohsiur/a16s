@@ -39,8 +39,8 @@ func (app *App) showTasksPages(reload bool) error {
 	}
 
 	var serviceName *string
-	if app.service != nil {
-		serviceName = app.service.ServiceName
+	if svc := app.Service(); svc != nil {
+		serviceName = svc.ServiceName
 	}
 
 	// Cluster task list: do not scope ListTasks to a single service.
@@ -48,7 +48,7 @@ func (app *App) showTasksPages(reload bool) error {
 		serviceName = nil
 	}
 
-	resources, warnStoppedAfterEmptyRunning, err := app.Clients.ListTasks(app.cluster.ClusterName, serviceName, app.taskStatus)
+	resources, warnStoppedAfterEmptyRunning, err := app.Clients.ListTasks(app.Cluster().ClusterName, serviceName, app.taskStatus)
 
 	err = buildResourcePage(resources, app, err, func() resourceViewBuilder {
 		if warnStoppedAfterEmptyRunning && len(resources) > 0 {
@@ -144,9 +144,9 @@ func (v *taskView) headerPageItems(index int) (items []headerItem) {
 
 // Generate table params
 func (v *taskView) tableParamsBuilder() (title string, headers []string, rowsBuilder func() [][]string) {
-	parent := *v.app.service.ServiceName
+	parent := *v.app.Service().ServiceName
 	if v.app.taskStatus == types.DesiredStatusStopped {
-		parent = *v.app.cluster.ClusterName
+		parent = *v.app.Cluster().ClusterName
 	}
 	title = fmt.Sprintf(color.TableTitleFmt, fmt.Sprintf("%s.%s", v.app.kind, strings.ToLower(string(v.app.taskStatus))), parent, len(v.tasks))
 	headers = []string{

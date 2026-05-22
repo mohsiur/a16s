@@ -50,7 +50,7 @@ func (app *App) showServicesPage(reload bool) error {
 		resources = app.bootstrapServices
 		app.bootstrapServices = nil
 	} else {
-		resources, err = app.Clients.ListServices(app.cluster.ClusterName)
+		resources, err = app.Clients.ListServices(app.Cluster().ClusterName)
 	}
 
 	// Set default service if provided through options
@@ -71,7 +71,7 @@ func (app *App) showServicesPage(reload bool) error {
 		}
 		// If service not found, reset the option and show warning
 		slog.Warn("service not found", "service", app.Option.Service)
-		app.Notice.Warnf("Service '%s' not found in cluster '%s'", app.Option.Service, *app.cluster.ClusterName)
+		app.Notice.Warnf("Service '%s' not found in cluster '%s'", app.Option.Service, *app.Cluster().ClusterName)
 		app.Option.Service = ""
 	}
 
@@ -177,7 +177,7 @@ func (v *serviceView) headerPageItems(index int) (items []headerItem) {
 
 // Generate table params
 func (v *serviceView) tableParamsBuilder() (title string, headers []string, rowsBuilder func() [][]string) {
-	title = fmt.Sprintf(color.TableTitleFmt, "Services", *v.app.cluster.ClusterName, len(v.services))
+	title = fmt.Sprintf(color.TableTitleFmt, "Services", *v.app.Cluster().ClusterName, len(v.services))
 	headers = []string{
 		"Name",
 		"Status",

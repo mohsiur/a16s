@@ -34,7 +34,11 @@ func (app *App) showInstancesPage(reload bool) error {
 		return nil
 	}
 
-	resources, err := app.Clients.ListContainerInstances(app.cluster.ClusterName)
+	var clusterName *string
+	if c := app.Cluster(); c != nil {
+		clusterName = c.ClusterName
+	}
+	resources, err := app.Clients.ListContainerInstances(clusterName)
 
 	err = buildResourcePage(resources, app, err, func() resourceViewBuilder {
 		return newInstanceView(resources, app)
@@ -86,8 +90,8 @@ func (v *instanceView) headerPageItems(index int) (items []headerItem) {
 // Generate table params
 func (v *instanceView) tableParamsBuilder() (title string, headers []string, rowsBuilder func() [][]string) {
 	clusterName := ""
-	if v.app.cluster.ClusterName != nil {
-		clusterName = *v.app.cluster.ClusterName
+	if c := v.app.Cluster(); c != nil && c.ClusterName != nil {
+		clusterName = *c.ClusterName
 	}
 
 	// Check if any instance has VersionInfo

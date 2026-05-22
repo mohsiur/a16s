@@ -33,9 +33,14 @@ func (app *App) showTaskDefinitionPage(reload bool) error {
 		return nil
 	}
 
-	td := app.service.TaskDefinition
+	var td *string
+	if svc := app.Service(); svc != nil {
+		td = svc.TaskDefinition
+	}
 	if td == nil {
-		td = app.task.TaskDefinitionArn
+		if t := app.Task(); t != nil {
+			td = t.TaskDefinitionArn
+		}
 	}
 	resources, err := app.Clients.ListFullTaskDefinition(td)
 	err = buildResourcePage(resources, app, err, func() resourceViewBuilder {
@@ -124,14 +129,16 @@ func (v *taskDefinitionView) headerPageItems(index int) (items []headerItem) {
 // Generate table params
 func (v *taskDefinitionView) tableParamsBuilder() (title string, headers []string, rowsBuilder func() [][]string) {
 	serviceName, td := "", ""
-	if v.app.service.ServiceName != nil {
-		serviceName = *v.app.service.ServiceName
+	if svc := v.app.Service(); svc != nil {
+		if svc.ServiceName != nil {
+			serviceName = *svc.ServiceName
+		}
+		if svc.TaskDefinition != nil {
+			td = *svc.TaskDefinition
+		}
 	}
-	if v.app.service.TaskDefinition != nil {
-		td = *v.app.service.TaskDefinition
-	}
-	if v.app.task.TaskDefinitionArn != nil {
-		td = *v.app.task.TaskDefinitionArn
+	if t := v.app.Task(); t != nil && t.TaskDefinitionArn != nil {
+		td = *t.TaskDefinitionArn
 	}
 	title = fmt.Sprintf(color.TableTitleFmt, v.app.kind, serviceName, len(v.taskDefinitions))
 	headers = []string{

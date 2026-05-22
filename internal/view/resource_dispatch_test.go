@@ -64,6 +64,7 @@ func TestClusterKind_BrowserURL(t *testing.T) {
 	if ck == nil {
 		t.Fatal("getClusterKind() = nil; init() should have registered it")
 	}
+	ck.Reset()
 	t.Cleanup(ck.Reset)
 
 	if got, _ := ck.BrowserURL("us-east-1"); got != "" {
@@ -88,6 +89,8 @@ func TestTaskKind_BrowserURL(t *testing.T) {
 	if tk == nil || sk == nil {
 		t.Fatal("task/service kind not registered")
 	}
+	tk.Reset()
+	sk.Reset()
 	t.Cleanup(tk.Reset)
 	t.Cleanup(sk.Reset)
 
