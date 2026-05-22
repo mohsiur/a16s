@@ -19,12 +19,12 @@ const (
 
 // Equivalent to
 // aws ecs describe-task-definition --task-definition ${taskDefinition}
-func (store *Store) DescribeTaskDefinition(tdArn *string) (types.TaskDefinition, error) {
+func (c *Clients) DescribeTaskDefinition(tdArn *string) (types.TaskDefinition, error) {
 
 	include := []types.TaskDefinitionField{
 		types.TaskDefinitionFieldTags,
 	}
-	taskDefinition, err := store.ecs.DescribeTaskDefinition(context.Background(), &ecs.DescribeTaskDefinitionInput{
+	taskDefinition, err := c.ECS().DescribeTaskDefinition(context.Background(), &ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: tdArn,
 		Include:        include,
 	})
@@ -40,8 +40,8 @@ type TaskDefinitionRevision = []string
 
 // Equivalent to
 // aws ecs list-task-definitions --family-prefix ${prefix}
-func (store *Store) ListTaskDefinition(familyName *string) (TaskDefinitionRevision, error) {
-	listTaskDefinitions, err := store.ecs.ListTaskDefinitions(context.Background(), &ecs.ListTaskDefinitionsInput{
+func (c *Clients) ListTaskDefinition(familyName *string) (TaskDefinitionRevision, error) {
+	listTaskDefinitions, err := c.ECS().ListTaskDefinitions(context.Background(), &ecs.ListTaskDefinitionsInput{
 		FamilyPrefix: familyName,
 		MaxResults:   aws.Int32(MaxTaskDefinitionRevision),
 		Sort:         types.SortOrderDesc,
@@ -58,10 +58,10 @@ func (store *Store) ListTaskDefinition(familyName *string) (TaskDefinitionRevisi
 // Equivalent to
 // aws ecs list-task-definitions --family-prefix ${prefix}
 // aws ecs describe-task-definition --task-definition ${taskDefinition}
-func (store *Store) ListFullTaskDefinition(taskDefinition *string) ([]types.TaskDefinition, error) {
+func (c *Clients) ListFullTaskDefinition(taskDefinition *string) ([]types.TaskDefinition, error) {
 	td := strings.Split(utils.ArnToName(taskDefinition), ":")
 	familyName := td[0]
-	list, err := store.ListTaskDefinition(&familyName)
+	list, err := c.ListTaskDefinition(&familyName)
 
 	if err != nil {
 		slog.Warn("failed to run aws api to run list task definition in ListFullTaskDefinition", "error", err)
@@ -74,7 +74,7 @@ func (store *Store) ListFullTaskDefinition(taskDefinition *string) ([]types.Task
 	for _, t := range list {
 		t := t
 		g.Go(func() error {
-			d, err := store.DescribeTaskDefinition(&t)
+			d, err := c.DescribeTaskDefinition(&t)
 			if err != nil {
 				slog.Warn("failed to run aws api to describe task definition", "error", err)
 				return err
@@ -91,8 +91,8 @@ func (store *Store) ListFullTaskDefinition(taskDefinition *string) ([]types.Task
 
 // Equivalent to
 // aws ecs list-task-definition-families --family-prefix ${prefix}
-func (store *Store) ListTaskDefinitionFamilies(familyPrefix *string) ([]string, error) {
-	familiesOutput, err := store.ecs.ListTaskDefinitionFamilies(context.Background(), &ecs.ListTaskDefinitionFamiliesInput{
+func (c *Clients) ListTaskDefinitionFamilies(familyPrefix *string) ([]string, error) {
+	familiesOutput, err := c.ECS().ListTaskDefinitionFamilies(context.Background(), &ecs.ListTaskDefinitionFamiliesInput{
 		FamilyPrefix: familyPrefix,
 		MaxResults:   aws.Int32(MaxTaskDefinitionFamily),
 		Status:       types.TaskDefinitionFamilyStatusActive,

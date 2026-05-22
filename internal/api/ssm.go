@@ -33,8 +33,7 @@ type SsmStartSessionInput struct {
 // --target ecs:${cluster_id}_${task_id}_${runtime_id}
 // --document-name AWS-StartPortForwardingSession
 // --parameters {"portNumber":["${port}"], "localPortNumber":["${local_port}"]}
-func (store *Store) StartSession(input *SsmStartSessionInput, profile string, region string) (*string, error) {
-	store.initSsmClient()
+func (c *Clients) StartSession(input *SsmStartSessionInput, profile string, region string) (*string, error) {
 	smpCi := "session-manager-plugin"
 
 	target := fmt.Sprintf("ecs:%s_%s_%s", input.ClusterName, input.TaskId, input.RuntimeId)
@@ -56,7 +55,7 @@ func (store *Store) StartSession(input *SsmStartSessionInput, profile string, re
 		Reason:       aws.String("session started via a16s"),
 	}
 
-	result, err := store.ssm.StartSession(context.Background(), startInput)
+	result, err := c.SSM().StartSession(context.Background(), startInput)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +93,7 @@ func (store *Store) StartSession(input *SsmStartSessionInput, profile string, re
 	return result.SessionId, err
 }
 
-func (store *Store) TerminateSessions(sessionIds []*string) error {
-	store.initSsmClient()
+func (c *Clients) TerminateSessions(sessionIds []*string) error {
 	g := new(errgroup.Group)
 
 	for _, id := range sessionIds {
@@ -104,7 +102,7 @@ func (store *Store) TerminateSessions(sessionIds []*string) error {
 			input := &ssm.TerminateSessionInput{
 				SessionId: id,
 			}
-			_, err := store.ssm.TerminateSession(context.Background(), input)
+			_, err := c.SSM().TerminateSession(context.Background(), input)
 			return err
 		})
 	}

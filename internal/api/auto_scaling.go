@@ -16,28 +16,26 @@ type AutoScalingData struct {
 	Activities []types.ScalingActivity
 }
 
-func (store *Store) GetAutoscaling(serviceArn *string) (*AutoScalingData, error) {
-	store.initAutoScalingClient()
-
-	targets, err := store.describeScalableTargets(serviceArn)
+func (c *Clients) GetAutoscaling(serviceArn *string) (*AutoScalingData, error) {
+	targets, err := c.describeScalableTargets(serviceArn)
 
 	if err != nil {
 		return nil, err
 	}
 
-	policies, err := store.describeScalingPolicies(serviceArn)
+	policies, err := c.describeScalingPolicies(serviceArn)
 
 	if err != nil {
 		return nil, err
 	}
 
-	activities, err := store.describeScalingActivities(serviceArn)
+	activities, err := c.describeScalingActivities(serviceArn)
 
 	if err != nil {
 		return nil, err
 	}
 
-	actions, err := store.describeScheduledAction(serviceArn)
+	actions, err := c.describeScheduledAction(serviceArn)
 
 	if err != nil {
 		return nil, err
@@ -55,13 +53,13 @@ func (store *Store) GetAutoscaling(serviceArn *string) (*AutoScalingData, error)
 // Equivalent to
 // aws application-autoscaling describe-scaling-activities --service-namespace ecs --resource-id {ServiceArn}
 // Auto scaling logs
-func (store *Store) describeScalingActivities(serviceArn *string) ([]types.ScalingActivity, error) {
+func (c *Clients) describeScalingActivities(serviceArn *string) ([]types.ScalingActivity, error) {
 	activitiesInput := &applicationautoscaling.DescribeScalingActivitiesInput{
 		ServiceNamespace: "ecs",
 		ResourceId:       serviceArn,
 		MaxResults:       aws.Int32(10),
 	}
-	activitiesOutput, err := store.autoScaling.DescribeScalingActivities(context.Background(), activitiesInput)
+	activitiesOutput, err := c.AutoScaling().DescribeScalingActivities(context.Background(), activitiesInput)
 
 	if err != nil {
 		slog.Warn("failed to run aws api to auto scaling activities", "serviceArn", *serviceArn, "error", err)
@@ -73,12 +71,12 @@ func (store *Store) describeScalingActivities(serviceArn *string) ([]types.Scali
 
 // Equivalent to
 // aws application-autoscaling describe-scalable-targets --service-namespace ecs --resource-ids {[ServiceArn]}
-func (store *Store) describeScalableTargets(serviceArn *string) ([]types.ScalableTarget, error) {
+func (c *Clients) describeScalableTargets(serviceArn *string) ([]types.ScalableTarget, error) {
 	targetsInput := &applicationautoscaling.DescribeScalableTargetsInput{
 		ServiceNamespace: "ecs",
 		ResourceIds:      []string{*serviceArn},
 	}
-	targetsOutput, err := store.autoScaling.DescribeScalableTargets(context.Background(), targetsInput)
+	targetsOutput, err := c.AutoScaling().DescribeScalableTargets(context.Background(), targetsInput)
 
 	if err != nil {
 		slog.Warn("failed to run aws api to auto scaling activities", "serviceArn", *serviceArn, "error", err)
@@ -90,12 +88,12 @@ func (store *Store) describeScalableTargets(serviceArn *string) ([]types.Scalabl
 
 // Equivalent to
 // aws application-autoscaling describe-scaling-policies --service-namespace ecs --resource-id "service/<ClusterName>/<ServiceName>"
-func (store *Store) describeScalingPolicies(serviceArn *string) ([]types.ScalingPolicy, error) {
+func (c *Clients) describeScalingPolicies(serviceArn *string) ([]types.ScalingPolicy, error) {
 	policiesInput := &applicationautoscaling.DescribeScalingPoliciesInput{
 		ServiceNamespace: "ecs",
 		ResourceId:       serviceArn,
 	}
-	policiesOutput, err := store.autoScaling.DescribeScalingPolicies(context.Background(), policiesInput)
+	policiesOutput, err := c.AutoScaling().DescribeScalingPolicies(context.Background(), policiesInput)
 
 	if err != nil {
 		slog.Warn("failed to run aws api to auto scaling activities", "serviceArn", *serviceArn, "error", err)
@@ -107,12 +105,12 @@ func (store *Store) describeScalingPolicies(serviceArn *string) ([]types.Scaling
 
 // Equivalent to
 // aws application-autoscaling describe-scheduled-actions --service-namespace ecs --resource-id "service/<ClusterName>/<ServiceName>"
-func (store *Store) describeScheduledAction(serviceArn *string) ([]types.ScheduledAction, error) {
+func (c *Clients) describeScheduledAction(serviceArn *string) ([]types.ScheduledAction, error) {
 	actionsInput := &applicationautoscaling.DescribeScheduledActionsInput{
 		ServiceNamespace: "ecs",
 		ResourceId:       serviceArn,
 	}
-	actionsOutput, err := store.autoScaling.DescribeScheduledActions(context.Background(), actionsInput)
+	actionsOutput, err := c.AutoScaling().DescribeScheduledActions(context.Background(), actionsInput)
 
 	if err != nil {
 		slog.Warn("failed to run aws api to auto scaling scheduled actions", "serviceArn", *serviceArn, "error", err)

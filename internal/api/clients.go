@@ -158,3 +158,18 @@ func (c *Clients) DynamoDB() *dynamodb.Client {
 	}
 	return c.dynamodb
 }
+
+// ClientsWith*ForTest helpers seed a Clients with a pre-built service
+// client so middleware-mocked tests can target a specific AWS API. Other
+// accessors will lazy-build against the supplied cfg as usual.
+func ClientsWithLambdaForTest(cfg aws.Config, c *lambda.Client) *Clients {
+	return &Clients{cfg: cfg, lambda: c}
+}
+
+func ClientsWithSqsForTest(cfg aws.Config, c *sqs.Client) *Clients {
+	return &Clients{cfg: cfg, sqs: c}
+}
+
+func ClientsWithDynamoDBForTest(cfg aws.Config, c *dynamodb.Client) *Clients {
+	return &Clients{cfg: cfg, dynamodb: c}
+}

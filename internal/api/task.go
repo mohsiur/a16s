@@ -21,7 +21,7 @@ import (
 // `aws ecs list-tasks --cluster ${CLUSTER} --desired-status STOPPED` return all stopped tasks in cluster
 // The bool is true only when the running list was empty and results are stopped tasks
 // from a cluster-wide list (so the UI can warn). It is false when the user asked for stopped tasks directly.
-func (store *Store) ListTasks(clusterName, serviceName *string, status types.DesiredStatus) ([]types.Task, bool, error) {
+func (c *Clients) ListTasks(clusterName, serviceName *string, status types.DesiredStatus) ([]types.Task, bool, error) {
 	limit := int32(100)
 	resultTasks := []types.Task{}
 	describeTasksInclude := []types.TaskField{
@@ -37,7 +37,7 @@ func (store *Store) ListTasks(clusterName, serviceName *string, status types.Des
 		listTaskServiceName = nil
 	}
 
-	listTasksOutput, err := store.ecs.ListTasks(context.Background(), &ecs.ListTasksInput{
+	listTasksOutput, err := c.ECS().ListTasks(context.Background(), &ecs.ListTasksInput{
 		Cluster:       clusterName,
 		ServiceName:   listTaskServiceName,
 		DesiredStatus: status,
@@ -54,7 +54,7 @@ func (store *Store) ListTasks(clusterName, serviceName *string, status types.Des
 	}
 
 	if status == types.DesiredStatusRunning && len(listTasksOutput.TaskArns) == 0 {
-		listTasksOutput, err = store.ecs.ListTasks(context.Background(), &ecs.ListTasksInput{
+		listTasksOutput, err = c.ECS().ListTasks(context.Background(), &ecs.ListTasksInput{
 			Cluster:       clusterName,
 			DesiredStatus: types.DesiredStatusStopped,
 			MaxResults:    &limit,
@@ -70,7 +70,7 @@ func (store *Store) ListTasks(clusterName, serviceName *string, status types.Des
 		warnFallbackFromRunningToStopped = true
 	}
 
-	describeTasksOutput, err := store.ecs.DescribeTasks(context.Background(), &ecs.DescribeTasksInput{
+	describeTasksOutput, err := c.ECS().DescribeTasks(context.Background(), &ecs.DescribeTasksInput{
 		Cluster: clusterName,
 		Tasks:   listTasksOutput.TaskArns,
 		Include: describeTasksInclude,
@@ -102,8 +102,8 @@ func (store *Store) ListTasks(clusterName, serviceName *string, status types.Des
 
 // aws ecs register-task-definition --family ${{family}} --...
 // return registered task definition revision
-func (store *Store) RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInput) (string, int32, error) {
-	registeredTdOutput, err := store.ecs.RegisterTaskDefinition(context.Background(), input)
+func (c *Clients) RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInput) (string, int32, error) {
+	registeredTdOutput, err := c.ECS().RegisterTaskDefinition(context.Background(), input)
 	if err != nil {
 		return "", 0, err
 	}
@@ -113,8 +113,8 @@ func (store *Store) RegisterTaskDefinition(input *ecs.RegisterTaskDefinitionInpu
 }
 
 // aws ecs stop-task --cluster ${cluster} --task ${taskId}
-func (store *Store) StopTask(input *ecs.StopTaskInput) error {
-	_, err := store.ecs.StopTask(context.Background(), input)
+func (c *Clients) StopTask(input *ecs.StopTaskInput) error {
+	_, err := c.ECS().StopTask(context.Background(), input)
 	if err != nil {
 		return err
 	}
@@ -122,8 +122,8 @@ func (store *Store) StopTask(input *ecs.StopTaskInput) error {
 }
 
 // aws ecs describe-container-instances --cluster ${cluster} --container-instances ${instanceId}
-func (store *Store) GetTaskInstanceId(cluster, containerInstance *string) (string, error) {
-	describeOutput, err := store.ecs.DescribeContainerInstances(context.Background(), &ecs.DescribeContainerInstancesInput{
+func (c *Clients) GetTaskInstanceId(cluster, containerInstance *string) (string, error) {
+	describeOutput, err := c.ECS().DescribeContainerInstances(context.Background(), &ecs.DescribeContainerInstancesInput{
 		Cluster:            cluster,
 		ContainerInstances: []string{*containerInstance},
 	})
