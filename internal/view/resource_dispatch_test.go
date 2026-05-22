@@ -313,6 +313,38 @@ func TestKindString_PrefersResourceTitle(t *testing.T) {
 	}
 }
 
+// TestIsFlatLeaf_DrivenByTraits pins that the arrow-scroll affordance is
+// gated on Resource.Traits().WideTable. Adding a new wide-table leaf kind
+// (e.g. S3 buckets) should set the trait and have isFlatLeaf return true
+// without editing the kind enum's switch.
+func TestIsFlatLeaf_DrivenByTraits(t *testing.T) {
+	cases := []struct {
+		k    kind
+		want bool
+	}{
+		// Wide-table leaves: arrows scroll columns.
+		{LambdaKind, true},
+		{SQSPeekKind, true},
+		{DynamoDBScanKind, true},
+		// Drillable parents: arrows move rows.
+		{SQSKind, false},
+		{DynamoDBKind, false},
+		{DynamoDBIndexKind, false},
+		// ECS chain: arrows move rows.
+		{ClusterKind, false},
+		{ServiceKind, false},
+		{TaskKind, false},
+		{ContainerKind, false},
+		// Unmigrated: defaults to false.
+		{InstanceKind, false},
+	}
+	for _, c := range cases {
+		if got := c.k.isFlatLeaf(); got != c.want {
+			t.Errorf("isFlatLeaf(%v) = %t; want %t", c.k, got, c.want)
+		}
+	}
+}
+
 // TestResourceShow_OverriddenByMigratedKinds pins that every kind whose
 // Show() is dispatched by showPrimaryKindPage actually overrides the
 // BaseKind default. If a kind embeds BaseKind without supplying its own

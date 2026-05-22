@@ -327,6 +327,9 @@ func (k *sqsPeekKind) BrowserURL(region string) (string, error) {
 func (k *sqsPeekKind) FooterItem() kindpkg.FooterItem {
 	return kindpkg.FooterItem{Label: "messages"}
 }
+func (k *sqsPeekKind) Traits() kindpkg.Traits {
+	return kindpkg.Traits{WideTable: true}
+}
 
 func (v *sqsView) getViewAndFooter() (*view, *tview.TextView) {
 	return &v.view, v.footer.middle

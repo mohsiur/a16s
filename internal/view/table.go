@@ -174,19 +174,25 @@ func (v *view) handleSelected(row, column int) {
 	}
 	if v.app.kind == ContainerKind {
 		v.execShell()
+		return
 	}
+	// Lambda/SQSPeek have non-drilldown Enter handlers (log tail, message
+	// body); both are non-Drillable so the trait check below already
+	// blocks the default drill. The explicit branches stay because the
+	// Enter action is kind-specific; refactoring those into Resource
+	// methods is the next step beyond this PR.
 	if v.app.kind == LambdaKind {
-		// Lambda has no drill-down child; Enter opens the function's log tail.
 		v.openLambdaLogs()
 		return
 	}
 	if v.app.kind == SQSPeekKind {
-		// SQS messages: Enter opens the message body in a read-only view.
 		v.openSQSMessageBody()
 		return
 	}
-	if v.app.kind == DynamoDBScanKind {
-		// Scan items are leaf rows; Enter is a no-op until a future drill-in.
+	// Migrated kinds opt into Enter→drill via Traits.Drillable. A
+	// Resource that does not set Drillable (e.g. DDBScanKind, future S3)
+	// gets Enter as a no-op.
+	if r := resolveResource(v.app.kind); r != nil && !r.Traits().Drillable {
 		return
 	}
 	v.app.rowIndex = 0

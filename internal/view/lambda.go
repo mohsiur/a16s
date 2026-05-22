@@ -88,6 +88,7 @@ func (k *lambdaKind) Traits() kindpkg.Traits {
 		Filterable:  true,
 		Refreshable: true,
 		Browsable:   true,
+		WideTable:   true,
 	}
 }
 
