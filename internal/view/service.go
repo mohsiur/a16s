@@ -50,7 +50,7 @@ func (app *App) showServicesPage(reload bool) error {
 		resources = app.bootstrapServices
 		app.bootstrapServices = nil
 	} else {
-		resources, err = app.Store.ListServices(app.cluster.ClusterName)
+		resources, err = app.Clients.ListServices(app.cluster.ClusterName)
 	}
 
 	// Set default service if provided through options

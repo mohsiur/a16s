@@ -34,7 +34,7 @@ func (app *App) showInstancesPage(reload bool) error {
 		return nil
 	}
 
-	resources, err := app.Store.ListContainerInstances(app.cluster.ClusterName)
+	resources, err := app.Clients.ListContainerInstances(app.cluster.ClusterName)
 
 	err = buildResourcePage(resources, app, err, func() resourceViewBuilder {
 		return newInstanceView(resources, app)

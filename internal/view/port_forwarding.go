@@ -30,7 +30,7 @@ func (v *view) portForwardingForm() (*tview.Form, *string) {
 	placeHolderPort := "8080"
 	placeHolderLocalPort := "8080"
 
-	td, err := v.app.Store.DescribeTaskDefinition(v.app.task.TaskDefinitionArn)
+	td, err := v.app.Clients.DescribeTaskDefinition(v.app.task.TaskDefinitionArn)
 	if err != nil {
 		return nil, nil
 	}
@@ -87,7 +87,7 @@ func (v *view) portForwardingForm() (*tview.Form, *string) {
 		port := f.GetFormItemByLabel(portLabel).(*tview.InputField).GetText()
 		localPort := f.GetFormItemByLabel(localPortLabel).(*tview.InputField).GetText()
 
-		sessionId, err := v.app.Store.StartSession(&api.SsmStartSessionInput{
+		sessionId, err := v.app.Clients.StartSession(&api.SsmStartSessionInput{
 			ClusterName: clusterName,
 			Host:        host,
 			TaskId:      taskId,
@@ -188,7 +188,7 @@ func (v *view) terminatePortForwardingForm() (*tview.Form, *string) {
 	// handle form submit
 	f.AddButton("Terminate", func() {
 		// terminal targe container sessions
-		err := v.app.Store.TerminateSessions(sessionIds)
+		err := v.app.Clients.TerminateSessions(sessionIds)
 		if err != nil {
 			slog.Error("failed to terminated port forwarding sessions", "error", err)
 		} else {

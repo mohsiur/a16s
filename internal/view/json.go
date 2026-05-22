@@ -58,7 +58,7 @@ func (v *view) switchToAutoScalingJson() {
 	}
 
 	serviceFullName := utils.ArnToFullName(serviceArn)
-	autoScaling, err := v.app.Store.GetAutoscaling(&serviceFullName)
+	autoScaling, err := v.app.Clients.GetAutoscaling(&serviceFullName)
 
 	if err != nil {
 		return
@@ -79,7 +79,7 @@ func (v *view) switchToServiceRevisionJson() {
 		return
 	}
 
-	serviceRevision, err := v.app.Store.GetServiceRevision(serviceRevisionArn)
+	serviceRevision, err := v.app.Clients.GetServiceRevision(serviceRevisionArn)
 
 	if err != nil {
 		return
@@ -216,7 +216,7 @@ func (v *view) openInEditor(beforeJson []byte) {
 		}
 
 		register := func() {
-			family, revision, err := v.app.Store.RegisterTaskDefinition(&updatedTd)
+			family, revision, err := v.app.Clients.RegisterTaskDefinition(&updatedTd)
 
 			if err != nil {
 				v.app.Notice.Warnf("failed to register new task definition, err: %v", err)

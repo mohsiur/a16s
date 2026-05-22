@@ -225,7 +225,7 @@ func (k *ddbKind) loadInventory(app kindpkg.App, reload bool) error {
 	k.loadDone = done
 	k.mu.Unlock()
 
-	names, err := app.APIStore().ListTables(context.Background())
+	names, err := app.AWSClients().ListTables(context.Background())
 	var descs []*ddbTypes.TableDescription
 	var errs []error
 	if err == nil {
@@ -239,7 +239,7 @@ func (k *ddbKind) loadInventory(app kindpkg.App, reload bool) error {
 		for i, name := range names {
 			i, name := i, name
 			g.Go(func() error {
-				td, derr := app.APIStore().DescribeTable(ctx, name)
+				td, derr := app.AWSClients().DescribeTable(ctx, name)
 				descs[i] = td
 				errs[i] = derr
 				return nil
@@ -319,7 +319,7 @@ func (app *App) showTablesPage(reload bool) error {
 			return newDDBView(tables, app)
 		})
 	}
-	names, err := app.Store.ListTables(context.Background())
+	names, err := app.Clients.ListTables(context.Background())
 	if err != nil {
 		return buildResourcePage([]*ddbTypes.TableDescription(nil), app, err, func() resourceViewBuilder {
 			return newDDBView(nil, app)
@@ -327,7 +327,7 @@ func (app *App) showTablesPage(reload bool) error {
 	}
 	tables := make([]*ddbTypes.TableDescription, 0, len(names))
 	for _, n := range names {
-		td, derr := app.Store.DescribeTable(context.Background(), n)
+		td, derr := app.Clients.DescribeTable(context.Background(), n)
 		if derr != nil || td == nil {
 			continue
 		}
@@ -643,7 +643,7 @@ func (app *App) showIndexItemsPage(reload bool) error {
 	indexName := app.ddbIndex.name
 	pk := app.ddbIndex.partitionKey
 	sk := app.ddbIndex.sortKey
-	items, err := app.Store.ScanIndexFirstPage(context.Background(), tableName, indexName, 25)
+	items, err := app.Clients.ScanIndexFirstPage(context.Background(), tableName, indexName, 25)
 	return buildResourcePage(items, app, err, func() resourceViewBuilder {
 		return newDDBScanView(tableName, indexName, pk, sk, items, app)
 	})

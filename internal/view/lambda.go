@@ -127,7 +127,7 @@ func (k *lambdaKind) loadInventory(app kindpkg.App, reload bool) error {
 	k.loadDone = done
 	k.mu.Unlock()
 
-	fns, err := app.APIStore().ListFunctions(context.Background())
+	fns, err := app.AWSClients().ListFunctions(context.Background())
 
 	k.mu.Lock()
 	k.loadErr = err
@@ -189,7 +189,7 @@ func (app *App) showLambdasPage(reload bool) error {
 			return newLambdaView(fns, app)
 		})
 	}
-	fns, err := app.Store.ListFunctions(context.Background())
+	fns, err := app.Clients.ListFunctions(context.Background())
 	return buildResourcePage(fns, app, err, func() resourceViewBuilder {
 		return newLambdaView(fns, app)
 	})

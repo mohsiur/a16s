@@ -28,7 +28,7 @@ func (app *App) showRegionsPage(reload bool) error {
 		return nil
 	}
 
-	regions, err := app.Store.ListRegions()
+	regions, err := app.Clients.ListRegions()
 
 	err = buildResourcePage(regions, app, err, func() resourceViewBuilder {
 		return newRegionView(regions, app)

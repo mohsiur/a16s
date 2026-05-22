@@ -120,7 +120,7 @@ func (v *view) revertProfileOrRegion(to string, prev string) {
 		v.app.kind = RegionKind
 		globalRegion = prev
 	}
-	v.app.Store.SwitchAwsConfig(globalProfile, globalRegion)
+	v.app.Clients.SwitchAwsConfig(globalProfile, globalRegion)
 }
 
 // Handle selected event for table when press Enter
@@ -133,7 +133,7 @@ func (v *view) handleSelected(row, column int) {
 		case Entity:
 			globalProfile = entity.profile
 			slog.Info("Handle select", "profile", globalProfile)
-			if err := v.app.Store.SwitchAwsConfig(globalProfile, globalRegion); err != nil {
+			if err := v.app.Clients.SwitchAwsConfig(globalProfile, globalRegion); err != nil {
 				v.revertProfileOrRegion("profiles", prevProfile)
 				return
 			}
@@ -154,7 +154,7 @@ func (v *view) handleSelected(row, column int) {
 		case Entity:
 			globalRegion = entity.region.Code
 			slog.Info("Handle select", "region", globalRegion)
-			if err := v.app.Store.SwitchAwsConfig(globalProfile, globalRegion); err != nil {
+			if err := v.app.Clients.SwitchAwsConfig(globalProfile, globalRegion); err != nil {
 				v.revertProfileOrRegion("regions", prevRegion)
 				return
 			}

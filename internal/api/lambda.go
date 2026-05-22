@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 )
@@ -51,9 +50,3 @@ func (c *Clients) InvokeFunction(ctx context.Context, name string, payload []byt
 	})
 }
 
-// StoreWithLambdaForTest constructs a Store with a pre-configured Lambda client.
-// Mirrors StoreWithSqsForTest — the only entry point for view-package tests
-// that need to mock Lambda at the SDK middleware layer.
-func StoreWithLambdaForTest(cfg *aws.Config, c *lambda.Client) *Store {
-	return &Store{Config: cfg, Clients: ClientsWithLambdaForTest(*cfg, c)}
-}

@@ -28,7 +28,7 @@ func (app *App) showProfilesPage(reload bool) error {
 		return nil
 	}
 
-	profiles, err := app.Store.ListProfiles()
+	profiles, err := app.Clients.ListProfiles()
 
 	err = buildResourcePage(profiles, app, err, func() resourceViewBuilder {
 		return newProfileView(profiles, app)

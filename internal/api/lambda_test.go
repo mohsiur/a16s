@@ -11,7 +11,7 @@ import (
 	smithymiddleware "github.com/aws/smithy-go/middleware"
 )
 
-func newStoreWithLambda(t *testing.T, fn func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error)) *Store {
+func newClientsWithLambda(t *testing.T, fn func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error)) *Clients {
 	t.Helper()
 	cfg := aws.Config{Region: "us-east-1"}
 	c := lambda.NewFromConfig(cfg, func(o *lambda.Options) {
@@ -19,11 +19,11 @@ func newStoreWithLambda(t *testing.T, fn func(ctx context.Context, in smithymidd
 			return stack.Finalize.Add(smithymiddleware.FinalizeMiddlewareFunc("mock", fn), smithymiddleware.Before)
 		})
 	})
-	return &Store{Config: &cfg, Clients: ClientsWithLambdaForTest(cfg, c)}
+	return ClientsWithLambdaForTest(cfg, c)
 }
 
 func TestListFunctionsHappyPath(t *testing.T) {
-	store := newStoreWithLambda(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+	c := newClientsWithLambda(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
 		return smithymiddleware.FinalizeOutput{
 			Result: &lambda.ListFunctionsOutput{
 				Functions: []lambdaTypes.FunctionConfiguration{
@@ -33,7 +33,7 @@ func TestListFunctionsHappyPath(t *testing.T) {
 		}, smithymiddleware.Metadata{}, nil
 	})
 
-	got, err := store.ListFunctions(context.Background())
+	got, err := c.ListFunctions(context.Background())
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -47,7 +47,7 @@ func TestListFunctionsHappyPath(t *testing.T) {
 // returned slice should contain functions from both pages.
 func TestListFunctionsTwoPages(t *testing.T) {
 	calls := 0
-	store := newStoreWithLambda(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+	c := newClientsWithLambda(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
 		calls++
 		switch calls {
 		case 1:
@@ -72,7 +72,7 @@ func TestListFunctionsTwoPages(t *testing.T) {
 		return smithymiddleware.FinalizeOutput{}, smithymiddleware.Metadata{}, nil
 	})
 
-	got, err := store.ListFunctions(context.Background())
+	got, err := c.ListFunctions(context.Background())
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -89,7 +89,7 @@ func TestListFunctionsTwoPages(t *testing.T) {
 // fetched, return what we have with a nil error.
 func TestListFunctionsErrorAfterFirstPage(t *testing.T) {
 	calls := 0
-	store := newStoreWithLambda(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
+	c := newClientsWithLambda(t, func(ctx context.Context, in smithymiddleware.FinalizeInput, next smithymiddleware.FinalizeHandler) (smithymiddleware.FinalizeOutput, smithymiddleware.Metadata, error) {
 		calls++
 		switch calls {
 		case 1:
@@ -108,7 +108,7 @@ func TestListFunctionsErrorAfterFirstPage(t *testing.T) {
 		return smithymiddleware.FinalizeOutput{}, smithymiddleware.Metadata{}, nil
 	})
 
-	got, err := store.ListFunctions(context.Background())
+	got, err := c.ListFunctions(context.Background())
 	if err != nil {
 		t.Fatalf("err = %v; want nil for partial-page failure", err)
 	}

@@ -16,7 +16,7 @@ import (
 // `kind`; `kind` must not import `view`. The concrete *view.App will satisfy
 // this interface.
 type App interface {
-	APIStore() *api.Store
+	AWSClients() *api.Clients
 	FlashError(msg string)
 	// QueueUpdateDraw queues f on the tview event loop and forces a redraw
 	// after it returns. Used by background loaders that need to update UI.
@@ -127,7 +127,7 @@ func Names() []string {
 }
 
 // ResetAll calls Reset() on every registered Kind. Called from
-// api.Store.SwitchAwsConfig so per-kind selection state doesn't leak across
+// api.Clients.SwitchAwsConfig so per-kind selection state doesn't leak across
 // profile/region switches.
 func ResetAll() {
 	for _, k := range registry {

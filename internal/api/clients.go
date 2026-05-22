@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
+	"log/slog"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/account"
 	"github.com/aws/aws-sdk-go-v2/service/applicationautoscaling"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -15,20 +18,19 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 )
 
+// OnConfigSwitch is called after SwitchAwsConfig finishes resetting clients.
+// view package sets this to kind.ResetAll during app init.
+var OnConfigSwitch func()
+
 // Clients is the canonical per-service AWS client factory. Each accessor
 // (Lambda, SQS, ...) returns a lazily-built client constructed against the
 // current aws.Config. SwitchConfig swaps the config and resets every lazy
 // client so the next accessor call rebuilds against the new credentials.
 //
-// Phase 5 introduces this alongside Store. Store keeps its public API and
-// delegates client construction here; PR-B migrates kinds onto Clients
-// directly and PR-C deletes Store. Today both types coexist.
-//
 // Concurrency: Lambda()/SQS()/... are safe for concurrent callers via mu.
 // SwitchConfig also takes mu so a concurrent accessor either sees the old
 // config (and returns the old client) or waits and gets a fresh one — never
-// nil. This eliminates the read-then-nil race that the legacy initXClient
-// helpers in store.go had to work around with local-variable capture.
+// nil.
 type Clients struct {
 	mu  sync.Mutex
 	cfg aws.Config
@@ -44,13 +46,25 @@ type Clients struct {
 	dynamodb       *dynamodb.Client
 }
 
-// NewClients eagerly builds the ECS client (matching NewStore which has
-// always pre-built it) and leaves every other service for lazy construction.
+// NewClients eagerly builds the ECS client (it's hot on every cluster page)
+// and leaves every other service for lazy construction.
 func NewClients(cfg aws.Config) *Clients {
 	return &Clients{
 		cfg: cfg,
 		ecs: ecs.NewFromConfig(cfg),
 	}
+}
+
+// NewAWSClients loads the default AWS SDK config for the given profile/region
+// and returns a *Clients that lazy-builds per-service clients on demand.
+func NewAWSClients(profile string, region string) (*Clients, error) {
+	cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(region))
+	if err != nil {
+		slog.Error("failed to load aws SDK config", "error", err)
+		return nil, err
+	}
+	slog.Info("load config", slog.String("AWS_PROFILE", profile), slog.String("AWS_REGION", cfg.Region))
+	return NewClients(cfg), nil
 }
 
 // Config returns the active AWS config. Callers should not mutate it.

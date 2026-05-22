@@ -37,7 +37,7 @@ func (app *App) showTaskDefinitionPage(reload bool) error {
 	if td == nil {
 		td = app.task.TaskDefinitionArn
 	}
-	resources, err := app.Store.ListFullTaskDefinition(td)
+	resources, err := app.Clients.ListFullTaskDefinition(td)
 	err = buildResourcePage(resources, app, err, func() resourceViewBuilder {
 		return newTaskDefinitionView(resources, app)
 	})

@@ -9,11 +9,11 @@ import (
 // last flash so tests can assert on warning/error paths without spinning up
 // tview.
 type fakeApp struct {
-	store      *api.Store
+	clients    *api.Clients
 	flashedMsg string
 }
 
-func (f *fakeApp) APIStore() *api.Store { return f.store }
+func (f *fakeApp) AWSClients() *api.Clients { return f.clients }
 
 func (f *fakeApp) FlashError(msg string) { f.flashedMsg = msg }
 
