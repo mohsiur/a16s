@@ -8,6 +8,10 @@ import (
 	"github.com/rivo/tview"
 )
 
+func init() {
+	bindKind(ProfileKind, "", "profiles")
+}
+
 type profileView struct {
 	view
 	profiles []api.Profile

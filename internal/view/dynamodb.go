@@ -19,6 +19,9 @@ func init() {
 	kindpkg.Register(&ddbKind{})
 	kindpkg.Register(&ddbIndexKind{})
 	kindpkg.Register(&ddbScanKind{})
+	bindKind(DynamoDBKind, "ddb", "tables", "ddb", "dynamodb")
+	bindKind(DynamoDBIndexKind, "ddb-indexes")
+	bindKind(DynamoDBScanKind, "ddb-items")
 }
 
 type ddbKind struct {
