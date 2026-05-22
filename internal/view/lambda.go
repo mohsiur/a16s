@@ -17,7 +17,10 @@ import (
 // lambdaKind is the cross-process inventory cache for Lambda. It implements
 // kindpkg.Kind so the palette/preload registry can find it, but the actual
 // rendering goes through showLambdasPage + the legacy ECS chrome.
-func init() { kindpkg.Register(&lambdaKind{}) }
+func init() {
+	kindpkg.Register(&lambdaKind{})
+	bindKind(LambdaKind, "lambda", "lambdas")
+}
 
 type lambdaKind struct {
 	kindpkg.BaseKind

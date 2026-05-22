@@ -21,6 +21,13 @@ func init() {
 	kindpkg.Register(&containerKind{})
 	kindpkg.Register(&taskDefinitionKind{})
 	kindpkg.Register(&serviceDeploymentKind{})
+
+	bindKind(ClusterKind, "clusters", "clusters")
+	bindKind(ServiceKind, "services")
+	bindKind(TaskKind, "tasks")
+	bindKind(ContainerKind, "containers")
+	bindKind(TaskDefinitionKind, "task-definitions")
+	bindKind(ServiceDeploymentKind, "service-deployments")
 }
 
 // clusterKind adapts ECS cluster selection to kindpkg.Resource for browser

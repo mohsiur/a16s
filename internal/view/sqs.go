@@ -19,6 +19,8 @@ import (
 func init() {
 	kindpkg.Register(&sqsKind{})
 	kindpkg.Register(&sqsPeekKind{})
+	bindKind(SQSKind, "sqs", "queues", "sqs")
+	bindKind(SQSPeekKind, "sqs-messages")
 }
 
 type sqsKind struct {
