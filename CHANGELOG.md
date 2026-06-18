@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/mohsiur/a16s/compare/v0.1.3...v0.1.4) (2026-06-18)
+
+
+### Bug Fixes
+
+* **deps:** upgrade cloudwatchlogs to v1.77.0 to fix DoS vulnerability ([#58](https://github.com/mohsiur/a16s/issues/58)) ([69f82a3](https://github.com/mohsiur/a16s/commit/69f82a331a626e28e76aacd6f79ee97789aa1d0e))
+
 ## [0.1.3](https://github.com/mohsiur/a16s/compare/v0.1.2...v0.1.3) (2026-05-22)
 
 
