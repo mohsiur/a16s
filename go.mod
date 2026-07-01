@@ -17,7 +17,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.104.0
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.44.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.69.3
-	github.com/aws/smithy-go v1.27.1
+	github.com/aws/smithy-go v1.27.3
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/keidarcy/aws-regions/v3 v3.0.0-20260309105808-fbc1ba25ea42
 	github.com/lmittmann/tint v1.0.4
